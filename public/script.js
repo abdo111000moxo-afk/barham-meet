@@ -247,3 +247,72 @@ function togglePresentation() {
 socket.on('presentation-mode', (active) => {
     document.body.classList.toggle('presentation-mode', active);
 });
+
+// ------------ خاصية تسجيل المحاضرة ------------
+let mediaRecorder;
+let recordedChunks = [];
+let isRecording = false;
+
+async function toggleRecording() {
+    const recordBtn = document.getElementById('record-btn');
+
+    if (!isRecording) {
+        try {
+            // طلب إذن تسجيل الشاشة والميكروفون
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+                video: { mediaSource: "screen" },
+                audio: true
+            });
+
+            recordedChunks = [];
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) {
+                    recordedChunks.push(e.data);
+                }
+            };
+
+            mediaRecorder.onstop = saveRecording;
+
+            mediaRecorder.start();
+            isRecording = true;
+
+            // تغيير شكل ولون الزرار أثناء التسجيل
+            recordBtn.innerHTML = '<i class="fa-solid fa-square"></i> إيقاف وحفظ التسجيل';
+            recordBtn.style.backgroundColor = '#dc2626';
+
+            // إيقاف تلقائي في حال إغلاق المشاركة من شريط المتصفح
+            stream.getVideoTracks()[0].onended = () => {
+                if (isRecording) toggleRecording();
+            };
+
+        } catch (err) {
+            alert('لم يتم السماح بتسجيل الشاشة أو حدث خطأ.');
+        }
+    } else {
+        // إيقاف التسجيل
+        mediaRecorder.stop();
+        isRecording = false;
+
+        recordBtn.innerHTML = '<i class="fa-solid fa-circle"></i> بدء تسجيل المحاضرة';
+        recordBtn.style.backgroundColor = '';
+    }
+}
+
+// حفظ الفيديو تلقائياً على جهاز المستخدم
+function saveRecording() {
+    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = `محاضرة-Barham-Meet-${new Date().toLocaleDateString('ar-EG')}.webm`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }, 100);
+    alert('تم حفظ فيديو المحاضرة بنجاح على جهازك! 🎉');
+}
