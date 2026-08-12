@@ -1,0 +1,123 @@
+﻿<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Barham Meet - منصة الاجتماعات التفاعلية</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- 1. شاشة تسجيل الدخول وإنشاء الغرفة -->
+    <div id="login-screen" class="screen active">
+        <div class="login-card">
+            <h2><i class="fa-solid fa-video text-emerald"></i> Barham Meet</h2>
+            <div class="form-group">
+                <label>الاسم الكامل</label>
+                <input type="text" id="username-input" placeholder="أدخل اسمك هنا...">
+            </div>
+            <div class="form-group">
+                <label>الصورة الشخصية</label>
+                <input type="file" id="userpic-input" accept="image/*">
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="createRoom()"><i class="fa-solid fa-plus"></i> إنشاء غرفة جديدة</button>
+                <div class="divider">أو</div>
+                <div class="join-box">
+                    <input type="text" id="room-id-input" placeholder="كود الغرفة...">
+                    <button class="btn btn-secondary" onclick="joinRoom()"><i class="fa-solid fa-right-to-bracket"></i> دخول</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. شاشة رابط الغرفة للداعي -->
+    <div id="share-screen" class="screen">
+        <div class="login-card text-center">
+            <h3>تم إنشاء الغرفة بنجاح! 🎉</h3>
+            <p>شارك هذا الرابط مع الحضور لإنضمامهم:</p>
+            <div class="link-box">
+                <input type="text" id="created-room-link" readonly>
+                <button class="btn btn-copy" onclick="copyRoomLink()"><i class="fa-regular fa-copy"></i> نسخ</button>
+            </div>
+            <button class="btn btn-success mt-4" onclick="enterRoom()"><i class="fa-solid fa-arrow-right"></i> متابعة ودخول الغرفة</button>
+        </div>
+    </div>
+
+    <!-- 3. واجهة الغرفة الرئيسية -->
+    <div id="room-screen" class="screen">
+        <!-- شريط التنقل العلوي -->
+        <nav class="top-nav">
+            <div class="nav-tabs">
+                <button class="tab-btn active" data-tab="main" onclick="switchTab('main')"><i class="fa-solid fa-users"></i> المشتركين</button>
+                <button class="tab-btn" data-tab="whiteboard" onclick="switchTab('whiteboard')"><i class="fa-solid fa-chalkboard"></i> السبورة</button>
+                <button class="tab-btn" data-tab="cameras" onclick="switchTab('cameras')"><i class="fa-solid fa-video"></i> الكاميرات</button>
+                <button class="tab-btn" data-tab="screen" onclick="switchTab('screen')"><i class="fa-solid fa-desktop"></i> مشاركة الشاشة</button>
+            </div>
+            <div class="room-info">
+                <span>كود الغرفة: <strong id="current-room-id">------</strong></span>
+            </div>
+        </nav>
+
+        <!-- محتوى التبويبات -->
+        <main class="main-content">
+            
+            <!-- تبويب 1: المشتركين -->
+            <section id="tab-main" class="tab-content active">
+                <h3><i class="fa-solid fa-users"></i> الحضور في الغرفة</h3>
+                <div class="users-grid" id="users-grid"></div>
+            </section>
+
+            <!-- تبويب 2: السبورة التفاعلية -->
+            <section id="tab-whiteboard" class="tab-content">
+                <div class="whiteboard-toolbar">
+                    <button class="tool-btn active" id="tool-pen" onclick="setTool('pen')"><i class="fa-solid fa-pen"></i> قلم</button>
+                    <button class="tool-btn" id="tool-eraser" onclick="setTool('eraser')"><i class="fa-solid fa-eraser"></i> استيكة</button>
+                    <input type="color" id="brush-color" value="#10b981" title="لون القلم">
+                    <input type="range" id="brush-size" min="2" max="40" value="5" title="حجم الخط">
+                    <select id="bg-selector" onchange="changeBoardBg(this.value)">
+                        <option value="bg-white">خلفية بيضاء</option>
+                        <option value="bg-dark">خلفية سوداء</option>
+                        <option value="bg-lines">سطور كشكول</option>
+                        <option value="bg-grid">مربعات شبكية</option>
+                    </select>
+                    <button class="btn-danger" onclick="clearBoard()"><i class="fa-solid fa-trash"></i> مسح الكل</button>
+                    <button class="btn-success" onclick="downloadBoard()"><i class="fa-solid fa-download"></i> تصدير صورة</button>
+                </div>
+                <div class="canvas-container bg-white" id="canvas-container">
+                    <canvas id="whiteboard"></canvas>
+                </div>
+            </section>
+
+            <!-- تبويب 3: الكاميرات -->
+            <section id="tab-cameras" class="tab-content">
+                <div class="cameras-grid" id="cameras-grid"></div>
+                <!-- كاميرا منبثقة تحت -->
+                <div class="floating-cam" id="floating-cam">
+                    <video id="my-pip-video" autoplay muted playsinline></video>
+                    <span>كاميرتك</span>
+                </div>
+            </section>
+
+            <!-- تبويب 4: مشاركة الشاشة -->
+            <section id="tab-screen" class="tab-content">
+                <div class="screen-controls">
+                    <button class="btn btn-primary" onclick="startScreenShare()"><i class="fa-solid fa-desktop"></i> بدء مشاركة الشاشة</button>
+                    <button class="btn btn-warning" id="presentation-btn" onclick="togglePresentation()"><i class="fa-solid fa-expand"></i> وضعية الشرح للجميع</button>
+                    <button class="btn btn-secondary" id="laser-btn" onclick="toggleLaser()"><i class="fa-solid fa-wand-magic-sparkles"></i> مؤشر الليزر</button>
+                </div>
+                <div class="screen-viewer-wrapper" id="screen-wrapper">
+                    <video id="shared-screen-video" autoplay playsinline></video>
+                    <div id="laser-pointer" class="laser-pointer"></div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
