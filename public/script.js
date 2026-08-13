@@ -5,11 +5,13 @@ let userName = "";
 let userPic = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
 let localStream = null;
 
+// الإشعارات والصفحات
 let unreadChatCount = 0;
 let activeTab = 'main';
-let boardPages = [[]];
+let boardPages = [[]]; // تخزين خطوط الرسم لكل صفحة
 let currentPageIndex = 0;
 
+// السبورة
 const canvas = document.getElementById('whiteboard');
 const ctx = canvas ? canvas.getContext('2d') : null;
 let drawing = false;
@@ -17,52 +19,13 @@ let currentTool = 'pen';
 let currentColor = '#10b981';
 let currentSize = 5;
 
-// بداية التشغيل وقراءة الحساب
-window.addEventListener('DOMContentLoaded', () => {
-    const savedName = localStorage.getItem('alboulaqi_user_name');
-    const savedPic = localStorage.getItem('alboulaqi_user_pic');
-
-    if (savedName) {
-        userName = savedName;
-        if (savedPic) userPic = savedPic;
-        updateHomeUI();
-
-        const urlParams = new URLSearchParams(window.location.search);
-        const roomIdFromUrl = urlParams.get('room');
-
-        if (roomIdFromUrl) {
-            const roomInput = document.getElementById('room-id-input');
-            if (roomInput) roomInput.value = roomIdFromUrl;
-            showScreen('home-screen');
-        } else {
-            showScreen('home-screen');
-        }
-    } else {
-        showScreen('login-screen');
-    }
-});
-
-function saveInitialProfile() {
-    const nameInput = document.getElementById('username-input');
-    const name = nameInput ? nameInput.value.trim() : '';
-
-    if (!name) return alert('يرجى كتابة اسمك أولاً');
-
-    userName = name;
-    localStorage.setItem('alboulaqi_user_name', userName);
-    localStorage.setItem('alboulaqi_user_pic', userPic);
-
-    updateHomeUI();
-    showScreen('home-screen');
+function resizeCanvas() {
+    if (!canvas || !canvas.parentElement) return;
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight;
+    redrawCurrentPage();
 }
-
-function updateHomeUI() {
-    const nameEl = document.getElementById('home-user-name');
-    const imgEl = document.getElementById('home-user-img');
-
-    if (nameEl) nameEl.textContent = userName;
-    if (imgEl) imgEl.src = userPic;
-}
+window.addEventListener('resize', resizeCanvas);
 
 const userPicInput = document.getElementById('userpic-input');
 if (userPicInput) {
@@ -70,41 +33,20 @@ if (userPicInput) {
         const file = e.target.files[0];
         if (file) {
             const reader = new FileReader();
-            reader.onload = function(evt) { userPic = evt.target.result; };
+            reader.onload = function(evt) { 
+                userPic = evt.target.result;
+                const profileImg = document.getElementById('profile-preview-img');
+                if (profileImg) profileImg.src = userPic;
+            };
             reader.readAsDataURL(file);
         }
     });
 }
 
-function openSettingsModal() {
-    const nameInput = document.getElementById('modal-username-input');
-    const imgPreview = document.getElementById('modal-preview-img');
-    const modal = document.getElementById('settings-modal');
-
-    if (nameInput) nameInput.value = userName;
-    if (imgPreview) imgPreview.src = userPic;
-    if (modal) modal.classList.remove('hidden');
-}
-
-function closeSettingsModal() {
-    const modal = document.getElementById('settings-modal');
-    if (modal) modal.classList.add('hidden');
-}
-
-function saveSettingsChanges() {
-    const nameInput = document.getElementById('modal-username-input');
-    if (nameInput && nameInput.value.trim()) {
-        userName = nameInput.value.trim();
-        localStorage.setItem('alboulaqi_user_name', userName);
-        localStorage.setItem('alboulaqi_user_pic', userPic);
-        updateHomeUI();
-        closeSettingsModal();
-        alert('تم حفظ البيانات بنجاح! 🎉');
-    }
-}
-
-// 2️⃣ إنشاء وانضمام للغرفة
 function createRoom() {
+    const userInput = document.getElementById('username-input');
+    userName = (userInput && userInput.value.trim()) ? userInput.value.trim() : 'المحاضر';
+    
     const generatedId = Math.random().toString(36).substring(2, 8);
     currentRoomId = generatedId;
     isHost = true;
@@ -114,13 +56,18 @@ function createRoom() {
     });
 
     applyHostPermissions();
+    updateProfileUI();
+
     const linkInput = document.getElementById('created-room-link');
-    if (linkInput) linkInput.value = `${window.location.origin}/?room=${currentRoomId}`;
+    if (linkInput) linkInput.value = `${window.location.origin}?room=${currentRoomId}`;
     showScreen('share-screen');
 }
 
 function joinRoom() {
+    const userInput = document.getElementById('username-input');
     const roomInput = document.getElementById('room-id-input');
+    
+    userName = (userInput && userInput.value.trim()) ? userInput.value.trim() : 'حاضر';
     const roomId = roomInput ? roomInput.value.trim() : '';
 
     if (!roomId) return alert('يرجى كتابة كود الغرفة أولاً');
@@ -131,8 +78,10 @@ function joinRoom() {
         if (res && res.success) {
             isHost = res.isHost || false;
             applyHostPermissions();
+            updateProfileUI();
             enterRoom();
         } else {
+            updateProfileUI();
             enterRoom();
         }
     });
@@ -142,6 +91,25 @@ function applyHostPermissions() {
     document.querySelectorAll('.host-only').forEach(el => {
         el.style.display = isHost ? '' : 'none';
     });
+}
+
+function updateProfileUI() {
+    const nameDisplay = document.getElementById('profile-name-display');
+    const roleDisplay = document.getElementById('profile-role-display');
+    const profileImg = document.getElementById('profile-preview-img');
+
+    if (nameDisplay) nameDisplay.textContent = userName;
+    if (roleDisplay) roleDisplay.textContent = isHost ? 'منظم الغرفة (Host) 👑' : 'عضو (Viewer)';
+    if (profileImg) profileImg.src = userPic;
+}
+
+function updateProfile() {
+    const editInput = document.getElementById('edit-profile-name');
+    if (editInput && editInput.value.trim()) {
+        userName = editInput.value.trim();
+        updateProfileUI();
+        alert('تم تحديث اسمك بنجاح! 🎉');
+    }
 }
 
 function copyRoomLink() {
@@ -172,11 +140,11 @@ function leaveRoom() {
     if (confirm('هل أنت تأكد من الخروج من الغرفة؟')) {
         if (localStream) localStream.getTracks().forEach(t => t.stop());
         socket.emit('leave-room', { roomId: currentRoomId });
-        window.location.href = window.location.origin;
+        location.reload();
     }
 }
 
-// 3️⃣ التنقل وإصلاح عرض الحضور
+// التنقل بين التبويبات + مسح الإشعارات عند فتح الشات
 function switchTab(tab) {
     activeTab = tab;
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
@@ -191,7 +159,10 @@ function switchTab(tab) {
     if (tab === 'chat') {
         unreadChatCount = 0;
         const badge = document.getElementById('chat-badge');
-        if (badge) badge.classList.add('hidden');
+        if (badge) {
+            badge.textContent = '0';
+            badge.classList.add('hidden');
+        }
     }
 
     if (tab === 'whiteboard') setTimeout(resizeCanvas, 50);
@@ -203,27 +174,18 @@ function switchTab(tab) {
 
 socket.on('sync-tab', (tab) => switchTab(tab));
 
-// تحديث عرض قائمة الحضور لكل الناس فوراً
 socket.on('update-users', (users) => {
     const grid = document.getElementById('users-grid');
     if (!grid || !Array.isArray(users)) return;
     grid.innerHTML = users.map(u => `
         <div class="user-card">
             <img src="${u.pic || userPic}">
-            <h4>${u.name} ${u.isHost ? '👑 (Host)' : ''}</h4>
+            <h4>${u.name} ${u.isHost ? '👑' : ''}</h4>
         </div>
     `).join('');
 });
 
-// 4️⃣ السبورة
-function resizeCanvas() {
-    if (!canvas || !canvas.parentElement) return;
-    canvas.width = canvas.parentElement.clientWidth;
-    canvas.height = canvas.parentElement.clientHeight;
-    redrawCurrentPage();
-}
-window.addEventListener('resize', resizeCanvas);
-
+// ------------ السبورة وجمع الصفحات ------------
 if (canvas) {
     canvas.addEventListener('mousedown', () => drawing = true);
     canvas.addEventListener('mouseup', () => { drawing = false; if(ctx) ctx.beginPath(); });
@@ -273,6 +235,7 @@ function executeDraw(x, y) {
     ctx.beginPath();
     ctx.moveTo(x, y);
 
+    // حفظ الخط في الصفحة الحالية
     if (!boardPages[currentPageIndex]) boardPages[currentPageIndex] = [];
     boardPages[currentPageIndex].push({ x, y, color: lineStyle, size: currentSize });
 
@@ -294,9 +257,12 @@ socket.on('draw-board', ({ x, y, color, size, pageIndex }) => {
     ctx.moveTo(x, y);
 });
 
+// إدارة الصفحات
 function updatePageDisplay() {
     const pageDisplay = document.getElementById('page-num-display');
-    if (pageDisplay) pageDisplay.textContent = `${currentPageIndex + 1} / ${boardPages.length}`;
+    if (pageDisplay) {
+        pageDisplay.textContent = `${currentPageIndex + 1} / ${boardPages.length}`;
+    }
 }
 
 function addBoardPage() {
@@ -353,7 +319,7 @@ function redrawCurrentPage() {
 function clearBoard() {
     boardPages[currentPageIndex] = [];
     clearCanvasScreen();
-    socket.emit('clear-board', { roomId: currentRoomId });
+    socket.emit('clear-board', { roomId: currentRoomId, pageIndex: currentPageIndex });
 }
 
 socket.on('clear-board', () => {
@@ -401,7 +367,7 @@ function loadPDF(event) {
     reader.readAsArrayBuffer(file);
 }
 
-// 5️⃣ إصلاح عرض الرسائل للشخص نفسه وللجميع
+// ------------ الشات والملفات والإشعارات ------------
 function sendChatMessage() {
     const input = document.getElementById('chat-input');
     if (!input) return;
@@ -443,12 +409,12 @@ function handleChatKey(e) {
     if (e.key === 'Enter') sendChatMessage();
 }
 
-// استقبال وتنفيذ إظهار الرسائل عند الراسل والمستقبل
 socket.on('receive-chat', (data) => {
     const box = document.getElementById('chat-messages');
     if (!box) return;
 
-    if (activeTab !== 'chat' && data.sender !== userName) {
+    // زيادة عداد الإشعارات لو المستخدم مش فاتح تبويب الشات
+    if (activeTab !== 'chat') {
         unreadChatCount++;
         const badge = document.getElementById('chat-badge');
         if (badge) {
@@ -474,7 +440,7 @@ socket.on('receive-chat', (data) => {
     box.scrollTop = box.scrollHeight;
 });
 
-// 6️⃣ الكاميرا والليزر
+// ------------ باقي الميزات السابقة ------------
 function raiseHand() {
     socket.emit('raise-hand', { roomId: currentRoomId, userName });
     alert('تم إرسال طلب الكلمة للمحاضر ✋');
@@ -545,3 +511,66 @@ function togglePresentation() {
 socket.on('presentation-mode', (active) => {
     document.body.classList.toggle('presentation-mode', active);
 });
+
+let mediaRecorder;
+let recordedChunks = [];
+let isRecording = false;
+
+async function toggleRecording() {
+    const recordBtn = document.getElementById('record-btn');
+
+    if (!isRecording) {
+        try {
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+                video: { mediaSource: "screen" },
+                audio: true
+            });
+
+            recordedChunks = [];
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) recordedChunks.push(e.data);
+            };
+
+            mediaRecorder.onstop = saveRecording;
+            mediaRecorder.start();
+            isRecording = true;
+
+            if (recordBtn) {
+                recordBtn.innerHTML = '<i class="fa-solid fa-square"></i> إيقاف وحفظ التسجيل';
+                recordBtn.style.backgroundColor = '#dc2626';
+            }
+
+            stream.getVideoTracks()[0].onended = () => {
+                if (isRecording) toggleRecording();
+            };
+
+        } catch (err) {
+            alert('لم يتم السماح بتسجيل الشاشة.');
+        }
+    } else {
+        mediaRecorder.stop();
+        isRecording = false;
+
+        if (recordBtn) {
+            recordBtn.innerHTML = '<i class="fa-solid fa-circle"></i> بدء تسجيل المحاضرة';
+            recordBtn.style.backgroundColor = '';
+        }
+    }
+}
+
+function saveRecording() {
+    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = `محاضرة-Al-Boulaqi-Meet.webm`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }, 100);
+}

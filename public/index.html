@@ -10,11 +10,10 @@
 </head>
 <body>
 
-    <!-- 1. شاشة التسجيل لأول مرة (تظهر مرة واحدة فقط) -->
+    <!-- 1. شاشة تسجيل الدخول -->
     <div id="login-screen" class="screen active">
         <div class="login-card">
             <h2><i class="fa-solid fa-video text-emerald"></i> Al-Boulaqi Meet</h2>
-            <p class="subtitle mb-3">مرحباً بك! أدخل بياناتك المرة الأولى فقط</p>
             <div class="form-group">
                 <label>الاسم الكامل</label>
                 <input type="text" id="username-input" placeholder="أدخل اسمك هنا...">
@@ -22,26 +21,6 @@
             <div class="form-group">
                 <label>الصورة الشخصية</label>
                 <input type="file" id="userpic-input" accept="image/*">
-            </div>
-
-            <button class="btn btn-primary btn-block" onclick="saveInitialProfile()">حفظ ومتابعة <i class="fa-solid fa-arrow-left"></i></button>
-        </div>
-    </div>
-
-    <!-- 2. شاشة التحكم الرئيسية (Home Dashboard) بعد حفظ البيانات -->
-    <div id="home-screen" class="screen">
-        <div class="login-card">
-            <div class="home-header">
-                <h2><i class="fa-solid fa-video text-emerald"></i> Al-Boulaqi Meet</h2>
-                <button class="btn-settings-icon" onclick="openSettingsModal()" title="إعدادات الملف الشخصي"><i class="fa-solid fa-gear"></i></button>
-            </div>
-            
-            <div class="user-welcome-box">
-                <img id="home-user-img" src="https://cdn-icons-png.flaticon.com/512/149/149071.png" alt="User">
-                <div>
-                    <h4 id="home-user-name">أهلاً بك!</h4>
-                    <small style="color: #94a3b8;">جاهز للبدء؟</small>
-                </div>
             </div>
 
             <div class="action-buttons">
@@ -55,31 +34,7 @@
         </div>
     </div>
 
-    <!-- ⚙️ نافذة الإعدادات المنبثقة (Modal) لتعديل الاسم والصورة -->
-    <div id="settings-modal" class="modal-overlay hidden">
-        <div class="modal-card">
-            <div class="modal-header">
-                <h3><i class="fa-solid fa-user-gear"></i> إعدادات الملف الشخصي</h3>
-                <button class="btn-close-modal" onclick="closeSettingsModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="profile-avatar-wrapper text-center mb-3">
-                    <img id="modal-preview-img" src="https://cdn-icons-png.flaticon.com/512/149/149071.png" alt="Profile">
-                </div>
-                <div class="form-group">
-                    <label>تعديل اسم العرض:</label>
-                    <input type="text" id="modal-username-input" class="form-control" placeholder="الاسم جديد...">
-                </div>
-                <div class="form-group">
-                    <label>تغيير الصورة الشخصية:</label>
-                    <input type="file" id="modal-userpic-input" accept="image/*">
-                </div>
-                <button class="btn btn-success btn-block" onclick="saveSettingsChanges()"><i class="fa-solid fa-check"></i> حفظ التحديثات</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 3. شاشة رابط الغرفة للداعي -->
+    <!-- 2. شاشة مشاركة الرابط -->
     <div id="share-screen" class="screen">
         <div class="login-card text-center">
             <h3>تم إنشاء الغرفة بنجاح! 🎉</h3>
@@ -92,10 +47,11 @@
         </div>
     </div>
 
-    <!-- 4. الواجهة الرئيسية للغرفة -->
+    <!-- 3. الواجهة الرئيسية بالتصميم المطور -->
     <div id="room-screen" class="screen">
         <div class="app-layout">
             
+            <!-- القائمة الجانبية Sidebar -->
             <aside class="app-sidebar">
                 <div class="brand">
                     <i class="fa-solid fa-video"></i>
@@ -119,6 +75,9 @@
                         <i class="fa-solid fa-comments"></i> المحادثة
                         <span id="chat-badge" class="badge-unread hidden">0</span>
                     </button>
+                    <button class="nav-item" data-tab="profile" onclick="switchTab('profile')">
+                        <i class="fa-solid fa-user-gear"></i> ملفي الشخصي
+                    </button>
                 </nav>
 
                 <div class="sidebar-footer">
@@ -127,6 +86,7 @@
                 </div>
             </aside>
 
+            <!-- منطقة العمل الرئيسية -->
             <div class="main-wrapper">
                 <header class="top-header">
                     <div class="room-code-badge">
@@ -135,13 +95,13 @@
                 </header>
 
                 <main class="content-body">
-                    <!-- تبويب المشتركين -->
+                    <!-- تبويب 1: المشتركين -->
                     <section id="tab-main" class="tab-content active">
                         <h3><i class="fa-solid fa-users"></i> الحضور في الغرفة</h3>
                         <div class="users-grid" id="users-grid"></div>
                     </section>
 
-                    <!-- تبويب السبورة التفاعلية -->
+                    <!-- تبويب 2: السبورة التفاعلية الكاملة -->
                     <section id="tab-whiteboard" class="tab-content full-content">
                         <div class="floating-toolbar">
                             <div class="tool-group">
@@ -164,11 +124,12 @@
                                 </label>
                             </div>
 
+                            <!-- إدارة صفحات السبورة -->
                             <div class="tool-group page-controls">
                                 <button class="btn-sm-tool" onclick="prevBoardPage()"><i class="fa-solid fa-chevron-right"></i></button>
                                 <span id="page-num-display">1 / 1</span>
                                 <button class="btn-sm-tool" onclick="nextBoardPage()"><i class="fa-solid fa-chevron-left"></i></button>
-                                <button class="btn-sm-tool host-only btn-add-page" onclick="addBoardPage()" title="إضافة صفحة"><i class="fa-solid fa-plus"></i></button>
+                                <button class="btn-sm-tool host-only btn-add-page" onclick="addBoardPage()" title="إضافة صفحة جديدة"><i class="fa-solid fa-plus"></i></button>
                             </div>
 
                             <div class="tool-group">
@@ -182,7 +143,7 @@
                         </div>
                     </section>
 
-                    <!-- تبويب الكاميرات -->
+                    <!-- تبويب 3: الكاميرات -->
                     <section id="tab-cameras" class="tab-content">
                         <div class="cameras-grid" id="cameras-grid"></div>
                         <div class="floating-cam" id="floating-cam">
@@ -191,7 +152,7 @@
                         </div>
                     </section>
 
-                    <!-- تبويب مشاركة الشاشة -->
+                    <!-- تبويب 4: مشاركة الشاشة بكامل المساحة -->
                     <section id="tab-screen" class="tab-content full-content">
                         <div class="screen-top-bar">
                             <button class="btn btn-primary host-only" onclick="startScreenShare()"><i class="fa-solid fa-desktop"></i> بدء مشاركة الشاشة</button>
@@ -205,7 +166,7 @@
                         </div>
                     </section>
 
-                    <!-- تبويب الشات -->
+                    <!-- تبويب 5: الشات مع مرفقات الصور والملفات -->
                     <section id="tab-chat" class="tab-content">
                         <div class="modern-chat-card">
                             <div class="chat-header-bar">
@@ -221,6 +182,23 @@
                                 </label>
                                 <input type="text" id="chat-input" placeholder="اكتب رسالتك هنا..." onkeypress="handleChatKey(event)">
                                 <button class="btn btn-primary" onclick="sendChatMessage()"><i class="fa-solid fa-paper-plane"></i> إرسال</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- تبويب 6: البروفايل -->
+                    <section id="tab-profile" class="tab-content">
+                        <div class="profile-card">
+                            <div class="profile-avatar-wrapper">
+                                <img id="profile-preview-img" src="https://cdn-icons-png.flaticon.com/512/149/149071.png" alt="Profile">
+                            </div>
+                            <h3 id="profile-name-display">اسمك</h3>
+                            <p class="text-muted">المرتبة في الغرفة: <span id="profile-role-display">عضو</span></p>
+
+                            <div class="profile-edit-box">
+                                <label>تغيير اسم العرض:</label>
+                                <input type="text" id="edit-profile-name" class="form-control mb-3" placeholder="أدخل اسم جديد...">
+                                <button class="btn btn-success" onclick="updateProfile()"><i class="fa-solid fa-check"></i> حفظ التحديثات</button>
                             </div>
                         </div>
                     </section>
