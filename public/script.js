@@ -17,7 +17,7 @@ let currentTool = 'pen';
 let currentColor = '#10b981';
 let currentSize = 5;
 
-// تحميل البيانات المحفوظة تلقائياً أول ما الصفحة تفتح
+// 1️⃣ فحص الرابط عند الفتح أوتوماتيكياً (حل مشكلة الرابط)
 window.addEventListener('DOMContentLoaded', () => {
     const savedName = localStorage.getItem('alboulaqi_user_name');
     const savedPic = localStorage.getItem('alboulaqi_user_pic');
@@ -26,13 +26,24 @@ window.addEventListener('DOMContentLoaded', () => {
         userName = savedName;
         if (savedPic) userPic = savedPic;
         updateHomeUI();
-        showScreen('home-screen');
+        
+        // التقاط كود الغرفة من الرابط إذا وجد (?room=xxxx)
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomIdFromUrl = urlParams.get('room');
+        
+        if (roomIdFromUrl) {
+            const roomInput = document.getElementById('room-id-input');
+            if (roomInput) roomInput.value = roomIdFromUrl;
+            // انضمام تلقائي عبر الرابط
+            setTimeout(() => { joinRoom(); }, 300);
+        } else {
+            showScreen('home-screen');
+        }
     } else {
         showScreen('login-screen');
     }
 });
 
-// حفظ البيانات في LocalStorage لأول مرة
 function saveInitialProfile() {
     const nameInput = document.getElementById('username-input');
     const name = nameInput ? nameInput.value.trim() : '';
@@ -44,7 +55,17 @@ function saveInitialProfile() {
     localStorage.setItem('alboulaqi_user_pic', userPic);
 
     updateHomeUI();
-    showScreen('home-screen');
+
+    // فحص لو جاي من رابط مباشر
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomIdFromUrl = urlParams.get('room');
+    if (roomIdFromUrl) {
+        const roomInput = document.getElementById('room-id-input');
+        if (roomInput) roomInput.value = roomIdFromUrl;
+        joinRoom();
+    } else {
+        showScreen('home-screen');
+    }
 }
 
 function updateHomeUI() {
@@ -55,7 +76,6 @@ function updateHomeUI() {
     if (imgEl) imgEl.src = userPic;
 }
 
-// قراءة ملف الصور من شاشة التسجيل الأولى
 const userPicInput = document.getElementById('userpic-input');
 if (userPicInput) {
     userPicInput.addEventListener('change', function(e) {
@@ -70,7 +90,6 @@ if (userPicInput) {
     });
 }
 
-// ⚙️ نافذة الإعدادات الخارجية
 function openSettingsModal() {
     const nameInput = document.getElementById('modal-username-input');
     const imgPreview = document.getElementById('modal-preview-img');
@@ -114,7 +133,6 @@ function saveSettingsChanges() {
     }
 }
 
-// إنشاء وانضمام
 function createRoom() {
     const generatedId = Math.random().toString(36).substring(2, 8);
     currentRoomId = generatedId;
@@ -127,7 +145,7 @@ function createRoom() {
     applyHostPermissions();
 
     const linkInput = document.getElementById('created-room-link');
-    if (linkInput) linkInput.value = `${window.location.origin}?room=${currentRoomId}`;
+    if (linkInput) linkInput.value = `${window.location.origin}/?room=${currentRoomId}`;
     showScreen('share-screen');
 }
 
@@ -180,12 +198,11 @@ function showScreen(screenId) {
     if (targetScreen) targetScreen.classList.add('active');
 }
 
-// 🚪 خروج يرجعك لشاشة التحكم الرئيسية Home من غير مسح بياناتك
 function leaveRoom() {
     if (confirm('هل أنت تأكد من الخروج من الغرفة؟')) {
         if (localStream) localStream.getTracks().forEach(t => t.stop());
         socket.emit('leave-room', { roomId: currentRoomId });
-        showScreen('home-screen');
+        window.location.href = window.location.origin; // العودة للصفحة الرئيسية بدون كود غرفة بالرابط
     }
 }
 
@@ -229,7 +246,7 @@ socket.on('update-users', (users) => {
     `).join('');
 });
 
-// ------------ السبورة التفاعلية والصفحات ------------
+// ------------ السبورة ------------
 function resizeCanvas() {
     if (!canvas || !canvas.parentElement) return;
     canvas.width = canvas.parentElement.clientWidth;
@@ -417,53 +434,12 @@ function loadPDF(event) {
     reader.readAsArrayBuffer(file);
 }
 
-// ------------ الشات والمرفقات ------------
-function sendChatMessage() {
-    const input = document.getElementById('chat-input');
-    if (!input) return;
-    const msg = input.value.trim();
-    if (!msg) return;
-
-    socket.emit('send-chat', {
-        roomId: currentRoomId,
-        sender: userName,
-        message: msg,
-        fileUrl: null,
-        fileType: null,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    });
-    input.value = '';
-}
-
-function sendChatFile(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function(evt) {
-        const isImage = file.type.startsWith('image/');
-        socket.emit('send-chat', {
-            roomId: currentRoomId,
-            sender: userName,
-            message: `مرفق: ${file.name}`,
-            fileUrl: evt.target.result,
-            fileType: isImage ? 'image' : 'file',
-            fileName: file.name,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        });
-    };
-    reader.readAsDataURL(file);
-}
-
-function handleChatKey(e) {
-    if (e.key === 'Enter') sendChatMessage();
-}
-
-socket.on('receive-chat', (data) => {
+// 2️⃣ إظهار الشات المباشر أوتوماتيكياً (حل مشكلة الرسائل)
+function renderChatMessage(data) {
     const box = document.getElementById('chat-messages');
     if (!box) return;
 
-    if (activeTab !== 'chat') {
+    if (activeTab !== 'chat' && data.sender !== userName) {
         unreadChatCount++;
         const badge = document.getElementById('chat-badge');
         if (badge) {
@@ -487,9 +463,66 @@ socket.on('receive-chat', (data) => {
     msgDiv.innerHTML = `<strong style="color:#10b981">${data.sender}</strong> <small style="opacity:0.6; font-size:0.75rem">(${data.time})</small>: <p style="margin:4px 0 0 0; color:#f1f5f9">${data.message}</p>${fileHTML}`;
     box.appendChild(msgDiv);
     box.scrollTop = box.scrollHeight;
+}
+
+function sendChatMessage() {
+    const input = document.getElementById('chat-input');
+    if (!input) return;
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    const chatData = {
+        roomId: currentRoomId,
+        sender: userName,
+        message: msg,
+        fileUrl: null,
+        fileType: null,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    // إظهار الرسالة فوراً في الشاشة المحلية للراسل
+    renderChatMessage(chatData);
+
+    // إرسال الرسالة للسيرفر للآخرين
+    socket.emit('send-chat', chatData);
+    input.value = '';
+}
+
+function sendChatFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        const isImage = file.type.startsWith('image/');
+        const chatData = {
+            roomId: currentRoomId,
+            sender: userName,
+            message: `مرفق: ${file.name}`,
+            fileUrl: evt.target.result,
+            fileType: isImage ? 'image' : 'file',
+            fileName: file.name,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+
+        renderChatMessage(chatData);
+        socket.emit('send-chat', chatData);
+    };
+    reader.readAsDataURL(file);
+}
+
+function handleChatKey(e) {
+    if (e.key === 'Enter') sendChatMessage();
+}
+
+socket.on('receive-chat', (data) => {
+    // عدم تكرار الرسالة إذا كانت قادمة من نفس المستخدم
+    if (data.sender !== userName) {
+        renderChatMessage(data);
+    }
 });
 
-// ------------ باقي الميزات ------------
+// باقي الدوال السابقة
 function raiseHand() {
     socket.emit('raise-hand', { roomId: currentRoomId, userName });
     alert('تم إرسال طلب الكلمة للمحاضر ✋');
