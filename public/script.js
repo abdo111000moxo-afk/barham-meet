@@ -5,13 +5,11 @@ let userName = "";
 let userPic = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
 let localStream = null;
 
-// الإشعارات والصفحات
 let unreadChatCount = 0;
 let activeTab = 'main';
-let boardPages = [[]]; // تخزين خطوط الرسم لكل صفحة
+let boardPages = [[]];
 let currentPageIndex = 0;
 
-// السبورة
 const canvas = document.getElementById('whiteboard');
 const ctx = canvas ? canvas.getContext('2d') : null;
 let drawing = false;
@@ -19,14 +17,45 @@ let currentTool = 'pen';
 let currentColor = '#10b981';
 let currentSize = 5;
 
-function resizeCanvas() {
-    if (!canvas || !canvas.parentElement) return;
-    canvas.width = canvas.parentElement.clientWidth;
-    canvas.height = canvas.parentElement.clientHeight;
-    redrawCurrentPage();
-}
-window.addEventListener('resize', resizeCanvas);
+// تحميل البيانات المحفوظة تلقائياً أول ما الصفحة تفتح
+window.addEventListener('DOMContentLoaded', () => {
+    const savedName = localStorage.getItem('alboulaqi_user_name');
+    const savedPic = localStorage.getItem('alboulaqi_user_pic');
 
+    if (savedName) {
+        userName = savedName;
+        if (savedPic) userPic = savedPic;
+        updateHomeUI();
+        showScreen('home-screen');
+    } else {
+        showScreen('login-screen');
+    }
+});
+
+// حفظ البيانات في LocalStorage لأول مرة
+function saveInitialProfile() {
+    const nameInput = document.getElementById('username-input');
+    const name = nameInput ? nameInput.value.trim() : '';
+
+    if (!name) return alert('يرجى كتابة اسمك أولاً');
+
+    userName = name;
+    localStorage.setItem('alboulaqi_user_name', userName);
+    localStorage.setItem('alboulaqi_user_pic', userPic);
+
+    updateHomeUI();
+    showScreen('home-screen');
+}
+
+function updateHomeUI() {
+    const nameEl = document.getElementById('home-user-name');
+    const imgEl = document.getElementById('home-user-img');
+
+    if (nameEl) nameEl.textContent = userName;
+    if (imgEl) imgEl.src = userPic;
+}
+
+// قراءة ملف الصور من شاشة التسجيل الأولى
 const userPicInput = document.getElementById('userpic-input');
 if (userPicInput) {
     userPicInput.addEventListener('change', function(e) {
@@ -35,18 +64,58 @@ if (userPicInput) {
             const reader = new FileReader();
             reader.onload = function(evt) { 
                 userPic = evt.target.result;
-                const profileImg = document.getElementById('profile-preview-img');
-                if (profileImg) profileImg.src = userPic;
             };
             reader.readAsDataURL(file);
         }
     });
 }
 
+// ⚙️ نافذة الإعدادات الخارجية
+function openSettingsModal() {
+    const nameInput = document.getElementById('modal-username-input');
+    const imgPreview = document.getElementById('modal-preview-img');
+    const modal = document.getElementById('settings-modal');
+
+    if (nameInput) nameInput.value = userName;
+    if (imgPreview) imgPreview.src = userPic;
+    if (modal) modal.classList.remove('hidden');
+}
+
+function closeSettingsModal() {
+    const modal = document.getElementById('settings-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+const modalPicInput = document.getElementById('modal-userpic-input');
+if (modalPicInput) {
+    modalPicInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(evt) { 
+                userPic = evt.target.result;
+                const imgPreview = document.getElementById('modal-preview-img');
+                if (imgPreview) imgPreview.src = userPic;
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+}
+
+function saveSettingsChanges() {
+    const nameInput = document.getElementById('modal-username-input');
+    if (nameInput && nameInput.value.trim()) {
+        userName = nameInput.value.trim();
+        localStorage.setItem('alboulaqi_user_name', userName);
+        localStorage.setItem('alboulaqi_user_pic', userPic);
+        updateHomeUI();
+        closeSettingsModal();
+        alert('تم حفظ البيانات بنجاح! 🎉');
+    }
+}
+
+// إنشاء وانضمام
 function createRoom() {
-    const userInput = document.getElementById('username-input');
-    userName = (userInput && userInput.value.trim()) ? userInput.value.trim() : 'المحاضر';
-    
     const generatedId = Math.random().toString(36).substring(2, 8);
     currentRoomId = generatedId;
     isHost = true;
@@ -56,7 +125,6 @@ function createRoom() {
     });
 
     applyHostPermissions();
-    updateProfileUI();
 
     const linkInput = document.getElementById('created-room-link');
     if (linkInput) linkInput.value = `${window.location.origin}?room=${currentRoomId}`;
@@ -64,10 +132,7 @@ function createRoom() {
 }
 
 function joinRoom() {
-    const userInput = document.getElementById('username-input');
     const roomInput = document.getElementById('room-id-input');
-    
-    userName = (userInput && userInput.value.trim()) ? userInput.value.trim() : 'حاضر';
     const roomId = roomInput ? roomInput.value.trim() : '';
 
     if (!roomId) return alert('يرجى كتابة كود الغرفة أولاً');
@@ -78,10 +143,8 @@ function joinRoom() {
         if (res && res.success) {
             isHost = res.isHost || false;
             applyHostPermissions();
-            updateProfileUI();
             enterRoom();
         } else {
-            updateProfileUI();
             enterRoom();
         }
     });
@@ -91,25 +154,6 @@ function applyHostPermissions() {
     document.querySelectorAll('.host-only').forEach(el => {
         el.style.display = isHost ? '' : 'none';
     });
-}
-
-function updateProfileUI() {
-    const nameDisplay = document.getElementById('profile-name-display');
-    const roleDisplay = document.getElementById('profile-role-display');
-    const profileImg = document.getElementById('profile-preview-img');
-
-    if (nameDisplay) nameDisplay.textContent = userName;
-    if (roleDisplay) roleDisplay.textContent = isHost ? 'منظم الغرفة (Host) 👑' : 'عضو (Viewer)';
-    if (profileImg) profileImg.src = userPic;
-}
-
-function updateProfile() {
-    const editInput = document.getElementById('edit-profile-name');
-    if (editInput && editInput.value.trim()) {
-        userName = editInput.value.trim();
-        updateProfileUI();
-        alert('تم تحديث اسمك بنجاح! 🎉');
-    }
 }
 
 function copyRoomLink() {
@@ -136,15 +180,15 @@ function showScreen(screenId) {
     if (targetScreen) targetScreen.classList.add('active');
 }
 
+// 🚪 خروج يرجعك لشاشة التحكم الرئيسية Home من غير مسح بياناتك
 function leaveRoom() {
     if (confirm('هل أنت تأكد من الخروج من الغرفة؟')) {
         if (localStream) localStream.getTracks().forEach(t => t.stop());
         socket.emit('leave-room', { roomId: currentRoomId });
-        location.reload();
+        showScreen('home-screen');
     }
 }
 
-// التنقل بين التبويبات + مسح الإشعارات عند فتح الشات
 function switchTab(tab) {
     activeTab = tab;
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
@@ -185,7 +229,15 @@ socket.on('update-users', (users) => {
     `).join('');
 });
 
-// ------------ السبورة وجمع الصفحات ------------
+// ------------ السبورة التفاعلية والصفحات ------------
+function resizeCanvas() {
+    if (!canvas || !canvas.parentElement) return;
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight;
+    redrawCurrentPage();
+}
+window.addEventListener('resize', resizeCanvas);
+
 if (canvas) {
     canvas.addEventListener('mousedown', () => drawing = true);
     canvas.addEventListener('mouseup', () => { drawing = false; if(ctx) ctx.beginPath(); });
@@ -235,7 +287,6 @@ function executeDraw(x, y) {
     ctx.beginPath();
     ctx.moveTo(x, y);
 
-    // حفظ الخط في الصفحة الحالية
     if (!boardPages[currentPageIndex]) boardPages[currentPageIndex] = [];
     boardPages[currentPageIndex].push({ x, y, color: lineStyle, size: currentSize });
 
@@ -257,7 +308,6 @@ socket.on('draw-board', ({ x, y, color, size, pageIndex }) => {
     ctx.moveTo(x, y);
 });
 
-// إدارة الصفحات
 function updatePageDisplay() {
     const pageDisplay = document.getElementById('page-num-display');
     if (pageDisplay) {
@@ -367,7 +417,7 @@ function loadPDF(event) {
     reader.readAsArrayBuffer(file);
 }
 
-// ------------ الشات والملفات والإشعارات ------------
+// ------------ الشات والمرفقات ------------
 function sendChatMessage() {
     const input = document.getElementById('chat-input');
     if (!input) return;
@@ -413,7 +463,6 @@ socket.on('receive-chat', (data) => {
     const box = document.getElementById('chat-messages');
     if (!box) return;
 
-    // زيادة عداد الإشعارات لو المستخدم مش فاتح تبويب الشات
     if (activeTab !== 'chat') {
         unreadChatCount++;
         const badge = document.getElementById('chat-badge');
@@ -440,7 +489,7 @@ socket.on('receive-chat', (data) => {
     box.scrollTop = box.scrollHeight;
 });
 
-// ------------ باقي الميزات السابقة ------------
+// ------------ باقي الميزات ------------
 function raiseHand() {
     socket.emit('raise-hand', { roomId: currentRoomId, userName });
     alert('تم إرسال طلب الكلمة للمحاضر ✋');
