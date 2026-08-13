@@ -1,4 +1,7 @@
-﻿const socket = io();
+﻿const socket = io({
+    transports: ['websocket', 'polling']
+});
+
 let currentRoomId = null;
 let isHost = false;
 let userName = "";
@@ -17,7 +20,7 @@ let currentTool = 'pen';
 let currentColor = '#10b981';
 let currentSize = 5;
 
-// بداية التشغيل وقراءة الحساب
+// تحميل الحساب
 window.addEventListener('DOMContentLoaded', () => {
     const savedName = localStorage.getItem('alboulaqi_user_name');
     const savedPic = localStorage.getItem('alboulaqi_user_pic');
@@ -33,10 +36,8 @@ window.addEventListener('DOMContentLoaded', () => {
         if (roomIdFromUrl) {
             const roomInput = document.getElementById('room-id-input');
             if (roomInput) roomInput.value = roomIdFromUrl;
-            showScreen('home-screen');
-        } else {
-            showScreen('home-screen');
         }
+        showScreen('home-screen');
     } else {
         showScreen('login-screen');
     }
@@ -103,7 +104,7 @@ function saveSettingsChanges() {
     }
 }
 
-// 2️⃣ إنشاء وانضمام للغرفة
+// 2️⃣ إنشاء وانضمام الغرفة
 function createRoom() {
     const generatedId = Math.random().toString(36).substring(2, 8);
     currentRoomId = generatedId;
@@ -176,7 +177,7 @@ function leaveRoom() {
     }
 }
 
-// 3️⃣ التنقل وإصلاح عرض الحضور
+// 3️⃣ التنقل ومزامنة التبويبات والأعضاء
 function switchTab(tab) {
     activeTab = tab;
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
@@ -203,7 +204,7 @@ function switchTab(tab) {
 
 socket.on('sync-tab', (tab) => switchTab(tab));
 
-// تحديث عرض قائمة الحضور لكل الناس فوراً
+// تحديث قائمة الحضور لكل الناس
 socket.on('update-users', (users) => {
     const grid = document.getElementById('users-grid');
     if (!grid || !Array.isArray(users)) return;
@@ -213,6 +214,16 @@ socket.on('update-users', (users) => {
             <h4>${u.name} ${u.isHost ? '👑 (Host)' : ''}</h4>
         </div>
     `).join('');
+});
+
+// مزامنة حالة الشات والتبويب عند الانضمام
+socket.on('sync-initial-state', ({ messages, currentTab }) => {
+    if (messages && Array.isArray(messages)) {
+        const box = document.getElementById('chat-messages');
+        if (box) box.innerHTML = '';
+        messages.forEach(msg => appendMessageToDOM(msg));
+    }
+    if (currentTab) switchTab(currentTab);
 });
 
 // 4️⃣ السبورة
@@ -401,7 +412,7 @@ function loadPDF(event) {
     reader.readAsArrayBuffer(file);
 }
 
-// 5️⃣ إصلاح عرض الرسائل للشخص نفسه وللجميع
+// 5️⃣ الشات المباشر
 function sendChatMessage() {
     const input = document.getElementById('chat-input');
     if (!input) return;
@@ -443,8 +454,7 @@ function handleChatKey(e) {
     if (e.key === 'Enter') sendChatMessage();
 }
 
-// استقبال وتنفيذ إظهار الرسائل عند الراسل والمستقبل
-socket.on('receive-chat', (data) => {
+function appendMessageToDOM(data) {
     const box = document.getElementById('chat-messages');
     if (!box) return;
 
@@ -472,6 +482,10 @@ socket.on('receive-chat', (data) => {
     msgDiv.innerHTML = `<strong style="color:#10b981">${data.sender}</strong> <small style="opacity:0.6; font-size:0.75rem">(${data.time})</small>: <p style="margin:4px 0 0 0; color:#f1f5f9">${data.message}</p>${fileHTML}`;
     box.appendChild(msgDiv);
     box.scrollTop = box.scrollHeight;
+}
+
+socket.on('receive-chat', (data) => {
+    appendMessageToDOM(data);
 });
 
 // 6️⃣ الكاميرا والليزر

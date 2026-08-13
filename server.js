@@ -4,57 +4,89 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
+
 const io = new Server(server, {
-    cors: { origin: "*" }
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    },
+    transports: ['websocket', 'polling']
 });
 
 app.use(express.static('public'));
 
+// تخزين بيانات الغرف (الأعضاء + الشات + التبويب الحالي)
 const rooms = {};
 
 io.on('connection', (socket) => {
 
-    // 1️⃣ إنشاء غرفة
+    // 1️⃣ إنشاء غرفة جديدة
     socket.on('create-room', ({ userName, userPic, roomId }, callback) => {
         socket.join(roomId);
         socket.roomId = roomId;
         socket.userName = userName;
         
-        if (!rooms[roomId]) rooms[roomId] = [];
-        // إضافة المنظم
-        rooms[roomId].push({ id: socket.id, name: userName, pic: userPic, isHost: true });
+        rooms[roomId] = {
+            users: [{ id: socket.id, name: userName, pic: userPic, isHost: true }],
+            messages: [],
+            currentTab: 'main'
+        };
 
         if (callback) callback({ success: true, roomId });
         
-        // إرسال التحديث لجميع من في الغرفة (بما فيهم المنظم)
-        io.to(roomId).emit('update-users', rooms[roomId]);
+        // إرسال التحديث لجميع الأعضاء
+        io.to(roomId).emit('update-users', rooms[roomId].users);
     });
 
-    // 2️⃣ انضمام لغرفة
+    // 2️⃣ انضمام لغرفة موجودة
     socket.on('join-room', ({ roomId, userName, userPic }, callback) => {
         socket.join(roomId);
         socket.roomId = roomId;
         socket.userName = userName;
 
-        if (!rooms[roomId]) rooms[roomId] = [];
-        rooms[roomId].push({ id: socket.id, name: userName, pic: userPic, isHost: false });
+        if (!rooms[roomId]) {
+            rooms[roomId] = {
+                users: [],
+                messages: [],
+                currentTab: 'main'
+            };
+        }
+
+        // إضافة العضو إذا لم يكن موجوداً
+        const existingUser = rooms[roomId].users.find(u => u.id === socket.id);
+        if (!existingUser) {
+            rooms[roomId].users.push({ id: socket.id, name: userName, pic: userPic, isHost: false });
+        }
 
         if (callback) callback({ success: true, isHost: false });
-        
-        // إرسال التحديث لجميع الحضور
-        io.to(roomId).emit('update-users', rooms[roomId]);
+
+        // إرسال التحديث لجميع الأعضاء
+        io.to(roomId).emit('update-users', rooms[roomId].users);
+
+        // مزامنة الشات والتبويب الحالي للعضو الجديد المُنضم فوراً
+        socket.emit('sync-initial-state', {
+            messages: rooms[roomId].messages,
+            currentTab: rooms[roomId].currentTab
+        });
     });
 
-    // 3️⃣ الشات المباشر (يُبث للجميع بما فيهم الراسل)
+    // 3️⃣ إرسال الشات وبثه لجميع الموجودين في الغرفة
     socket.on('send-chat', (data) => {
+        if (rooms[data.roomId]) {
+            rooms[data.roomId].messages.push(data);
+        }
         io.to(data.roomId).emit('receive-chat', data);
     });
 
-    // 4️⃣ باقي الميزات
+    // 4️⃣ تغيير التبويب وبثه
     socket.on('change-tab', ({ roomId, tab }) => {
+        if (rooms[roomId]) {
+            rooms[roomId].currentTab = tab;
+        }
         socket.to(roomId).emit('sync-tab', tab);
     });
 
+    // 5️⃣ رسم السبورة
     socket.on('draw-board', ({ roomId, drawData }) => {
         socket.to(roomId).emit('draw-board', drawData);
     });
@@ -83,13 +115,25 @@ io.on('connection', (socket) => {
         socket.to(roomId).emit('presentation-mode', active);
     });
 
+    // 🚪 عند خروج أي مستخدم
+    socket.on('leave-room', ({ roomId }) => {
+        handleDisconnect(socket, roomId);
+    });
+
     socket.on('disconnect', () => {
-        if (socket.roomId && rooms[socket.roomId]) {
-            rooms[socket.roomId] = rooms[socket.roomId].filter(u => u.id !== socket.id);
-            io.to(socket.roomId).emit('update-users', rooms[socket.roomId]);
+        if (socket.roomId) {
+            handleDisconnect(socket, socket.roomId);
         }
     });
 });
+
+function handleDisconnect(socket, roomId) {
+    socket.leave(roomId);
+    if (rooms[roomId] && rooms[roomId].users) {
+        rooms[roomId].users = rooms[roomId].users.filter(u => u.id !== socket.id);
+        io.to(roomId).emit('update-users', rooms[roomId].users);
+    }
+}
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
