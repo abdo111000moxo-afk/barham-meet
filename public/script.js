@@ -1,5 +1,6 @@
 ﻿const socket = io();
 
+// البيانات الأساسية
 let currentUser = { name: '', avatar: '' };
 let currentRoomId = '';
 let isHost = false;
@@ -9,10 +10,14 @@ let recordedChunks = [];
 let unreadMessages = 0;
 let activeTab = 'camera';
 
+// متغيرة للصبورة
+let canvas, ctx, drawing = false, currentTool = 'pen';
+
 // ----------------------------------------------------
-// 1. إدارة البيانات وحفظها (Local Storage)
+// 1. التهيئة وإدارة التسجيل والبيانات (Local Storage)
 // ----------------------------------------------------
-window.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', () => {
+  // قراءة البيانات المحفوظة إن وجدت
   const savedName = localStorage.getItem('moxo_username');
   const savedAvatar = localStorage.getItem('moxo_avatar');
 
@@ -24,76 +29,118 @@ window.addEventListener('DOMContentLoaded', () => {
     showScreen('login-screen');
   }
 
+  // اختيار الصورة الشخصية
+  const avatarInput = document.getElementById('avatar-input');
+  if (avatarInput) {
+    avatarInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          currentUser.avatar = event.target.result;
+          const preview = document.getElementById('avatar-preview');
+          if (preview) preview.src = currentUser.avatar;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+
+  // تجهيز الكانفاس للصبورة
   setupCanvas();
 });
 
-document.getElementById('avatar-input').addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      currentUser.avatar = event.target.result;
-      document.getElementById('avatar-preview').src = currentUser.avatar;
-    };
-    reader.readAsDataURL(file);
-  }
-});
-
+// دالة حفظ الاسم والدخول للتطبيق
 function saveProfileAndContinue() {
-  const name = document.getElementById('username-input').value.trim();
-  if (!name) return alert('برجاء كتابة الاسم');
+  const nameInput = document.getElementById('username-input');
+  const name = nameInput ? nameInput.value.trim() : '';
+
+  if (!name) {
+    alert('برجاء كتابة الاسم أولاً');
+    return;
+  }
   
   currentUser.name = name;
   localStorage.setItem('moxo_username', currentUser.name);
-  if (currentUser.avatar) localStorage.setItem('moxo_avatar', currentUser.avatar);
+  if (currentUser.avatar) {
+    localStorage.setItem('moxo_avatar', currentUser.avatar);
+  }
 
   showScreen('dashboard-screen');
 }
 
+// تعديل بيانات المستخدم من الإعدادات
 function openSettingsModal() {
   const newName = prompt('تعديل الاسم:', currentUser.name);
-  if (newName) {
-    currentUser.name = newName;
-    localStorage.setItem('moxo_username', newName);
+  if (newName && newName.trim() !== '') {
+    currentUser.name = newName.trim();
+    localStorage.setItem('moxo_username', currentUser.name);
+    alert('تم تحديث الاسم بنجاح!');
+  }
+}
+
+// التنقل الآمن بين الشاشات
+function showScreen(id) {
+  const screens = document.querySelectorAll('.screen, #room-screen');
+  screens.forEach(s => s.classList.add('hidden'));
+
+  const targetScreen = document.getElementById(id);
+  if (targetScreen) {
+    targetScreen.classList.remove('hidden');
+  } else {
+    console.error('الشاشة غير موجودة:', id);
   }
 }
 
 // ----------------------------------------------------
-// 2. إدارة الغرف والانضمام
+// 2. إدارة الغرف والصلاحيات
 // ----------------------------------------------------
 function createRoom() {
   currentRoomId = Math.random().toString(36).substring(2, 8);
   isHost = true;
   const roomLink = `${window.location.origin}?room=${currentRoomId}`;
-  document.getElementById('generated-link').value = roomLink;
-  document.getElementById('room-created-modal').classList.remove('hidden');
+  
+  const linkInput = document.getElementById('generated-link');
+  if (linkInput) linkInput.value = roomLink;
+  
+  const createdModal = document.getElementById('room-created-modal');
+  if (createdModal) createdModal.classList.remove('hidden');
 }
 
 function copyRoomLink() {
   const copyText = document.getElementById('generated-link');
-  copyText.select();
-  navigator.clipboard.writeText(copyText.value);
-  alert('تم نسخ رابط الغرفة!');
+  if (copyText) {
+    copyText.select();
+    navigator.clipboard.writeText(copyText.value);
+    alert('تم نسخ رابط الغرفة!');
+  }
 }
 
 function proceedToRoom() {
-  document.getElementById('room-created-modal').classList.add('hidden');
-  document.getElementById('permissions-modal').classList.remove('hidden');
+  const createdModal = document.getElementById('room-created-modal');
+  if (createdModal) createdModal.classList.add('hidden');
+  
+  const permModal = document.getElementById('permissions-modal');
+  if (permModal) permModal.classList.remove('hidden');
 }
 
 function savePermissions() {
-  document.getElementById('permissions-modal').classList.add('hidden');
+  const permModal = document.getElementById('permissions-modal');
+  if (permModal) permModal.classList.add('hidden');
+  
   const permissions = {
-    allowWhiteboard: document.getElementById('perm-board').checked,
-    allowMic: document.getElementById('perm-mic').checked,
-    allowCam: document.getElementById('perm-cam').checked
+    allowWhiteboard: document.getElementById('perm-board')?.checked ?? true,
+    allowMic: document.getElementById('perm-mic')?.checked ?? true,
+    allowCam: document.getElementById('perm-cam')?.checked ?? true
   };
 
   enterRoom(permissions);
 }
 
 function joinRoomDirect() {
-  const roomId = document.getElementById('room-id-input').value.trim();
+  const roomIdInput = document.getElementById('room-id-input');
+  const roomId = roomIdInput ? roomIdInput.value.trim() : '';
+  
   if (!roomId) return alert('أدخل كود الغرفة');
   currentRoomId = roomId;
   isHost = false;
@@ -112,30 +159,31 @@ function enterRoom(permissions = null) {
 }
 
 // ----------------------------------------------------
-// 3. الوسائط والكاميرا المنبثقة
+// 3. الصوت والكاميرا
 // ----------------------------------------------------
 async function initLocalMedia() {
   try {
     myStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     
-    // إضافة الفيديو الشخصي للشبكة
     addVideoTile('my-local-video', myStream, currentUser.name, true);
     
-    // إعداد الفيديو المنبثق
-    document.getElementById('floating-video').srcObject = myStream;
+    const floatingVideo = document.getElementById('floating-video');
+    if (floatingVideo) floatingVideo.srcObject = myStream;
   } catch (err) {
-    console.error('الوصول للوسائط فشل:', err);
+    console.warn('تعذر الوصول للكاميرا/المايك، تم الدخول بدون وسائط:', err);
   }
 }
 
 function addVideoTile(id, stream, name, isMuted = false) {
   const grid = document.getElementById('video-grid');
+  if (!grid) return;
+
   let container = document.getElementById(`container-${id}`);
   
   if (!container) {
     container = document.createElement('div');
     container.id = `container-${id}`;
-    container.style.position = 'relative';
+    container.style.cssText = 'position: relative; width: 100%; height: 200px; background: #000; border-radius: 8px; overflow: hidden;';
 
     const videoEl = document.createElement('video');
     videoEl.id = id;
@@ -143,10 +191,11 @@ function addVideoTile(id, stream, name, isMuted = false) {
     videoEl.playsInline = true;
     videoEl.muted = isMuted;
     videoEl.srcObject = stream;
+    videoEl.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
 
     const label = document.createElement('div');
     label.innerText = name;
-    label.style.cssText = 'position:absolute; bottom:8px; right:8px; background:rgba(0,0,0,0.6); padding:4px 8px; border-radius:4px; font-size:12px;';
+    label.style.cssText = 'position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.6); padding: 4px 8px; border-radius: 4px; font-size: 12px; color: #fff;';
 
     container.appendChild(videoEl);
     container.appendChild(label);
@@ -154,8 +203,33 @@ function addVideoTile(id, stream, name, isMuted = false) {
   }
 }
 
+function toggleMyCam() {
+  if (myStream) {
+    const videoTrack = myStream.getVideoTracks()[0];
+    if (videoTrack) {
+      videoTrack.enabled = !videoTrack.enabled;
+      alert(videoTrack.enabled ? 'تم تشغيل الكاميرا' : 'تم إيقاف الكاميرا');
+    }
+  }
+}
+
+function toggleMyMic() {
+  if (myStream) {
+    const audioTrack = myStream.getAudioTracks()[0];
+    if (audioTrack) {
+      audioTrack.enabled = !audioTrack.enabled;
+      alert(audioTrack.enabled ? 'تم تشغيل المايك' : 'تم إيقاف المايك');
+    }
+  }
+}
+
+function toggleViewMode(mode) {
+  if (!isHost) return;
+  alert(mode === 'all' ? 'تم تفعيل وضع: الكل يرى الجميع' : 'تم تفعيل وضع: رؤية الهوست فقط');
+}
+
 // ----------------------------------------------------
-// 4. التنقل التلقائي والأبواب (Sync Tabs)
+// 4. التوجيه التلقائي بين الأزرار (Sync Tabs)
 // ----------------------------------------------------
 function hostSwitchTab(tabName) {
   if (isHost) {
@@ -174,41 +248,53 @@ function switchTabUI(tabName) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.sidebar-btn').forEach(b => b.classList.remove('active'));
 
-  document.getElementById(`tab-${tabName}`).classList.add('active');
+  const activeTabEl = document.getElementById(`tab-${tabName}`);
+  if (activeTabEl) activeTabEl.classList.add('active');
 
-  // إظهار الكاميرا المنبثقة إذا كنا بره تبويب الكاميرا
   const floatingCam = document.getElementById('floating-cam');
-  if (tabName !== 'camera') {
-    floatingCam.classList.remove('hidden');
-  } else {
-    floatingCam.classList.add('hidden');
+  if (floatingCam) {
+    if (tabName !== 'camera') {
+      floatingCam.classList.remove('hidden');
+    } else {
+      floatingCam.classList.add('hidden');
+    }
   }
 
   if (tabName === 'chat') {
     unreadMessages = 0;
-    document.getElementById('chat-badge').classList.add('hidden');
+    const badge = document.getElementById('chat-badge');
+    if (badge) badge.classList.add('hidden');
   }
 }
 
 // ----------------------------------------------------
 // 5. الصبورة (Whiteboard)
 // ----------------------------------------------------
-let canvas, ctx, drawing = false, currentTool = 'pen';
-
 function setupCanvas() {
   canvas = document.getElementById('whiteboard');
-  ctx = canvas.getContext('2d');
+  if (!canvas) return;
   
-  canvas.width = canvas.parentElement.clientWidth;
-  canvas.height = canvas.parentElement.clientHeight;
+  ctx = canvas.getContext('2d');
+  resizeCanvas();
+
+  window.addEventListener('resize', resizeCanvas);
 
   canvas.addEventListener('mousedown', startDrawing);
   canvas.addEventListener('mouseup', stopDrawing);
   canvas.addEventListener('mousemove', draw);
+  canvas.addEventListener('mouseleave', stopDrawing);
+}
+
+function resizeCanvas() {
+  if (canvas && canvas.parentElement) {
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight;
+  }
 }
 
 function setBoardTool(tool) {
   currentTool = tool;
+  document.querySelectorAll('.board-tool').forEach(btn => btn.classList.remove('active'));
 }
 
 function startDrawing(e) {
@@ -218,18 +304,21 @@ function startDrawing(e) {
 
 function stopDrawing() {
   drawing = false;
-  ctx.beginPath();
+  if (ctx) ctx.beginPath();
 }
 
 function draw(e) {
-  if (!drawing) return;
+  if (!drawing || !ctx) return;
 
   const rect = canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
 
-  const color = currentTool === 'eraser' ? '#ffffff' : document.getElementById('brush-color').value;
-  const size = document.getElementById('brush-size').value;
+  const colorInput = document.getElementById('brush-color');
+  const sizeInput = document.getElementById('brush-size');
+
+  const color = currentTool === 'eraser' ? '#ffffff' : (colorInput ? colorInput.value : '#000000');
+  const size = sizeInput ? sizeInput.value : 5;
 
   ctx.lineWidth = size;
   ctx.lineCap = 'round';
@@ -247,6 +336,7 @@ function draw(e) {
 }
 
 socket.on('draw-stroke', (data) => {
+  if (!ctx) return;
   ctx.lineWidth = data.size;
   ctx.lineCap = 'round';
   ctx.strokeStyle = data.color;
@@ -257,54 +347,77 @@ socket.on('draw-stroke', (data) => {
 });
 
 function clearBoard() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  socket.emit('clear-board', { roomId: currentRoomId });
+  if (ctx && canvas) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    socket.emit('clear-board', { roomId: currentRoomId });
+  }
 }
 
 socket.on('clear-board', () => {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (ctx && canvas) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
 });
 
 function changeBoardBg(type) {
+  if (!canvas) return;
   canvas.className = '';
   if (type === 'black') canvas.classList.add('black-bg');
   if (type === 'grid') canvas.classList.add('grid-bg');
 }
 
 function exportBoard(format) {
+  if (!canvas) return;
   if (format === 'png') {
     const link = document.createElement('a');
-    link.download = 'whiteboard.png';
+    link.download = 'moxo-whiteboard.png';
     link.href = canvas.toDataURL();
     link.click();
   } else if (format === 'pdf') {
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF('l', 'mm', 'a4');
-    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 297, 210);
-    pdf.save('whiteboard.pdf');
+    if (window.jspdf) {
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF('l', 'mm', 'a4');
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 297, 210);
+      pdf.save('moxo-whiteboard.pdf');
+    } else {
+      alert('جاري تحميل مكتبة PDF، حاول مرة أخرى.');
+    }
   }
 }
 
 // ----------------------------------------------------
-// 6. وضع الشرح والتكامل مع الشات
+// 6. مشاركة الشاشة ووضع الشرح
 // ----------------------------------------------------
+async function startScreenShare() {
+  try {
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    const screenVideo = document.getElementById('screen-video');
+    if (screenVideo) screenVideo.srcObject = screenStream;
+  } catch (err) {
+    console.error('تعذر مشاركة الشاشة:', err);
+  }
+}
+
 function toggleFocusMode() {
-  const isFocus = document.getElementById('focus-mode-btn').classList.toggle('active');
+  const btn = document.getElementById('focus-mode-btn');
+  const isFocus = btn ? btn.classList.toggle('active') : false;
   socket.emit('toggle-focus-mode', { roomId: currentRoomId, enabled: isFocus });
 }
 
 socket.on('focus-mode-toggled', (enabled) => {
   const screenTab = document.getElementById('tab-screen');
-  if (enabled) {
-    screenTab.classList.add('focus-mode');
-  } else {
-    screenTab.classList.remove('focus-mode');
+  if (screenTab) {
+    if (enabled) screenTab.classList.add('focus-mode');
+    else screenTab.classList.remove('focus-mode');
   }
 });
 
+// ----------------------------------------------------
+// 7. غرفة الشات
+// ----------------------------------------------------
 function sendTextMessage() {
   const input = document.getElementById('chat-input');
-  if (!input.value.trim()) return;
+  if (!input || !input.value.trim()) return;
 
   socket.emit('send-chat', {
     roomId: currentRoomId,
@@ -313,10 +426,26 @@ function sendTextMessage() {
   input.value = '';
 }
 
+function sendChatFile(inputEl) {
+  const file = inputEl.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      socket.emit('send-chat', {
+        roomId: currentRoomId,
+        message: { type: 'image', content: e.target.result }
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+}
+
 socket.on('receive-chat', (data) => {
   const messagesBox = document.getElementById('chat-messages');
+  if (!messagesBox) return;
+
   const msgEl = document.createElement('div');
-  msgEl.style.cssText = 'background:#242526; padding:8px 12px; border-radius:8px; max-width:80%;';
+  msgEl.style.cssText = 'background:#242526; padding:8px 12px; border-radius:8px; max-width:80%; margin-bottom:8px; color:#fff;';
   
   if (data.type === 'text') {
     msgEl.innerHTML = `<strong>${data.senderName}:</strong> ${data.content}`;
@@ -325,22 +454,26 @@ socket.on('receive-chat', (data) => {
   }
 
   messagesBox.appendChild(msgEl);
+  messagesBox.scrollTop = messagesBox.scrollHeight;
 
   if (activeTab !== 'chat') {
     unreadMessages++;
     const badge = document.getElementById('chat-badge');
-    badge.innerText = unreadMessages;
-    badge.classList.remove('hidden');
+    if (badge) {
+      badge.innerText = unreadMessages;
+      badge.classList.remove('hidden');
+    }
   }
 });
 
 // ----------------------------------------------------
-// 7. رفع اليد وتسجيل الحلقة
+// 8. رفع اليد والتسجيل
 // ----------------------------------------------------
 let isHandRaised = false;
 function toggleRaiseHand() {
   isHandRaised = !isHandRaised;
-  document.getElementById('raise-hand-btn').classList.toggle('active', isHandRaised);
+  const btn = document.getElementById('raise-hand-btn');
+  if (btn) btn.classList.toggle('active', isHandRaised);
   socket.emit('raise-hand', { roomId: currentRoomId, raised: isHandRaised });
 }
 
@@ -350,34 +483,35 @@ socket.on('hand-status-changed', (data) => {
   }
 });
 
-// تسجيل الشاشة مع الصوت
 async function toggleRecording() {
+  const btn = document.getElementById('record-btn');
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop();
-    document.getElementById('record-btn').classList.remove('active');
-    alert('تم إنهاء التسجيل وجاري التحميل...');
+    if (btn) btn.classList.remove('active');
+    alert('تم إنهاء التسجيل وجاري تحميل الملف...');
   } else {
-    const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-    mediaRecorder = new MediaRecorder(displayStream);
-    recordedChunks = [];
+    try {
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      mediaRecorder = new MediaRecorder(displayStream);
+      recordedChunks = [];
 
-    mediaRecorder.ondataavailable = (e) => recordedChunks.push(e.data);
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(recordedChunks, { type: 'video/webm' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `moxo-lesson-${Date.now()}.webm`;
-      a.click();
-    };
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunks.push(e.data);
+      };
 
-    mediaRecorder.start();
-    document.getElementById('record-btn').classList.add('active');
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `moxo-recording-${Date.now()}.webm`;
+        a.click();
+      };
+
+      mediaRecorder.start();
+      if (btn) btn.classList.add('active');
+    } catch (err) {
+      console.error('لم يتم بدء التسجيل:', err);
+    }
   }
-}
-
-// Helper Functions
-function showScreen(id) {
-  document.querySelectorAll('.screen, #room-screen').forEach(s => s.classList.add('hidden'));
-  document.getElementById(id).classList.remove('hidden');
 }
