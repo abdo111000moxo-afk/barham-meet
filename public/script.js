@@ -19,18 +19,19 @@ let currentTool = 'pen';
 let currentColor = '#10b981';
 let currentSize = 5;
 
-// تحميل البيانات والروابط
+// 1️⃣ بداية التشغيل والتحكم بالشاشات بدون وميض
 window.addEventListener('DOMContentLoaded', () => {
     const savedName = localStorage.getItem('alboulaqi_user_name');
     const savedPic = localStorage.getItem('alboulaqi_user_pic');
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomIdFromUrl = urlParams.get('room');
 
     if (savedName) {
         userName = savedName;
         if (savedPic) userPic = savedPic;
         updateHomeUI();
 
-        const urlParams = new URLSearchParams(window.location.search);
-        const roomIdFromUrl = urlParams.get('room');
         if (roomIdFromUrl) {
             const roomInput = document.getElementById('room-id-input');
             if (roomInput) roomInput.value = roomIdFromUrl;
@@ -40,6 +41,19 @@ window.addEventListener('DOMContentLoaded', () => {
         showScreen('login-screen');
     }
 });
+
+function showScreen(screenId) {
+    document.querySelectorAll('.screen').forEach(s => {
+        s.classList.remove('active');
+        s.style.display = 'none';
+    });
+
+    const targetScreen = document.getElementById(screenId);
+    if (targetScreen) {
+        targetScreen.classList.add('active');
+        targetScreen.style.display = 'flex';
+    }
+}
 
 function saveInitialProfile() {
     const nameInput = document.getElementById('username-input');
@@ -119,12 +133,6 @@ function enterRoom() {
     renderUsersGrid(currentUsersList);
     setTimeout(resizeCanvas, 100);
     startLocalCamera();
-}
-
-function showScreen(screenId) {
-    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    const targetScreen = document.getElementById(screenId);
-    if (targetScreen) targetScreen.classList.add('active');
 }
 
 function leaveRoom() {

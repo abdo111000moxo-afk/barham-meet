@@ -58,7 +58,7 @@ io.on('connection', (socket) => {
 
         if (callback) callback({ success: true, isHost: false });
 
-        // إرسال التحديث لجميع من في الغرفة (بما فيهم المنظم)
+        // إرسال التحديث لجميع من في الغرفة
         io.to(roomId).emit('update-users', rooms[roomId].users);
 
         // إرسال حالة الغرفة السابقة للعضو الجديد
@@ -69,7 +69,7 @@ io.on('connection', (socket) => {
         });
     });
 
-    // 3️⃣ الشات المباشر (إجبار إعادة الانضمام للبث الموحد)
+    // 3️⃣ الشات المباشر
     socket.on('send-chat', (data) => {
         if (data && data.roomId) {
             socket.join(data.roomId);
