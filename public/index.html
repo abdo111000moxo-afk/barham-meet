@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Al-Boulaqi Meet</title>
+    <title>Al-Boulaqi Meet - منصة الاجتماعات التفاعلية</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -34,11 +34,11 @@
         </div>
     </div>
 
-    <!-- 2. شاشة مشاركة الرابط -->
+    <!-- 2. شاشة رابط الغرفة -->
     <div id="share-screen" class="screen">
         <div class="login-card text-center">
             <h3>تم إنشاء الغرفة بنجاح! 🎉</h3>
-            <p>شارك هذا الرابط مع الحضور للانضمام:</p>
+            <p>شارك هذا الرابط مع الحضور لإنضمامهم:</p>
             <div class="link-box">
                 <input type="text" id="created-room-link" readonly>
                 <button class="btn btn-copy" onclick="copyRoomLink()"><i class="fa-regular fa-copy"></i> نسخ</button>
@@ -47,7 +47,7 @@
         </div>
     </div>
 
-    <!-- 3. الواجهة الرئيسية بالتصميم الجانبي الجديد -->
+    <!-- 3. الواجهة الرئيسية بالتصميم الجانبي المحدث -->
     <div id="room-screen" class="screen">
         <div class="app-layout">
             
@@ -85,7 +85,7 @@
                 </div>
             </aside>
 
-            <!-- محتوى الصفحة الرئيسية -->
+            <!-- منطقة العمل الرئيسية -->
             <div class="main-wrapper">
                 <header class="top-header">
                     <div class="room-code-badge">
@@ -102,7 +102,7 @@
 
                     <!-- تبويب السبورة -->
                     <section id="tab-whiteboard" class="tab-content">
-                        <div class="whiteboard-toolbar">
+                        <div class="whiteboard-toolbar" id="whiteboard-toolbar">
                             <button class="tool-btn active" id="tool-pen" onclick="setTool('pen')"><i class="fa-solid fa-pen"></i> قلم</button>
                             <button class="tool-btn" id="tool-eraser" onclick="setTool('eraser')"><i class="fa-solid fa-eraser"></i> استيكة</button>
                             <input type="color" id="brush-color" value="#10b981" title="لون القلم">
@@ -136,7 +136,7 @@
                         </div>
                     </section>
 
-                    <!-- تبويب مشاركة الشاشة والتسجيل -->
+                    <!-- تبويب مشاركة الشاشة -->
                     <section id="tab-screen" class="tab-content">
                         <div class="screen-controls mb-3">
                             <button class="btn btn-primary host-only" onclick="startScreenShare()"><i class="fa-solid fa-desktop"></i> بدء مشاركة الشاشة</button>
@@ -150,14 +150,14 @@
                         </div>
                     </section>
 
-                    <!-- تبويب الشات الحديث -->
+                    <!-- تبويب الشات المخصص -->
                     <section id="tab-chat" class="tab-content">
                         <div class="modern-chat-card">
                             <div class="chat-header-bar">
                                 <h3><i class="fa-solid fa-comments"></i> المحادثة المباشرة</h3>
                             </div>
                             <div class="modern-chat-messages" id="chat-messages">
-                                <!-- الرسائل بتنزل هنا بتصميم احترافي -->
+                                <!-- الرسائل بتنزل هنا -->
                             </div>
                             <div class="chat-input-bar">
                                 <input type="text" id="chat-input" placeholder="اكتب رسالتك هنا..." onkeypress="handleChatKey(event)">
@@ -166,7 +166,7 @@
                         </div>
                     </section>
 
-                    <!-- تبويب الملف الشخصي الخاص بك (Profile) -->
+                    <!-- تبويب الملف الشخصي -->
                     <section id="tab-profile" class="tab-content">
                         <div class="profile-card">
                             <div class="profile-avatar-wrapper">

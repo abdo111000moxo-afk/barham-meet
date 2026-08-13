@@ -13,7 +13,6 @@ let currentTool = 'pen';
 let currentColor = '#10b981';
 let currentSize = 5;
 
-// ضبط أبعاد السبورة
 function resizeCanvas() {
     if (!canvas || !canvas.parentElement) return;
     canvas.width = canvas.parentElement.clientWidth;
@@ -21,7 +20,6 @@ function resizeCanvas() {
 }
 window.addEventListener('resize', resizeCanvas);
 
-// قراءة الصورة الشخصية
 const userPicInput = document.getElementById('userpic-input');
 if (userPicInput) {
     userPicInput.addEventListener('change', function(e) {
@@ -38,7 +36,6 @@ if (userPicInput) {
     });
 }
 
-// 1️⃣ إنشاء غرفة جديدة (Host)
 function createRoom() {
     const userInput = document.getElementById('username-input');
     userName = (userInput && userInput.value.trim()) ? userInput.value.trim() : 'المحاضر';
@@ -48,22 +45,17 @@ function createRoom() {
     isHost = true;
 
     socket.emit('create-room', { userName, userPic, roomId: generatedId }, (res) => {
-        if (res && res.roomId) {
-            currentRoomId = res.roomId;
-        }
+        if (res && res.roomId) currentRoomId = res.roomId;
     });
 
     applyHostPermissions();
     updateProfileUI();
 
     const linkInput = document.getElementById('created-room-link');
-    if (linkInput) {
-        linkInput.value = `${window.location.origin}?room=${currentRoomId}`;
-    }
+    if (linkInput) linkInput.value = `${window.location.origin}?room=${currentRoomId}`;
     showScreen('share-screen');
 }
 
-// 2️⃣ الانضمام لغرفة (Viewer)
 function joinRoom() {
     const userInput = document.getElementById('username-input');
     const roomInput = document.getElementById('room-id-input');
@@ -137,18 +129,14 @@ function showScreen(screenId) {
     if (targetScreen) targetScreen.classList.add('active');
 }
 
-// 🚪 الخروج من الغرفة
 function leaveRoom() {
     if (confirm('هل أنت تأكد من الخروج من الغرفة؟')) {
-        if (localStream) {
-            localStream.getTracks().forEach(t => t.stop());
-        }
+        if (localStream) localStream.getTracks().forEach(t => t.stop());
         socket.emit('leave-room', { roomId: currentRoomId });
         location.reload();
     }
 }
 
-// التنقل بين التبويبات للـ Sidebar الجديد
 function switchTab(tab) {
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -168,7 +156,6 @@ function switchTab(tab) {
 
 socket.on('sync-tab', (tab) => switchTab(tab));
 
-// تحديث قائمة المشتركين
 socket.on('update-users', (users) => {
     const grid = document.getElementById('users-grid');
     if (!grid || !Array.isArray(users)) return;
@@ -295,7 +282,7 @@ function loadPDF(event) {
     reader.readAsArrayBuffer(file);
 }
 
-// ------------ الشات المباشر ------------
+// ------------ الشات المباشر المحدث ------------
 function sendChatMessage() {
     const input = document.getElementById('chat-input');
     if (!input) return;
@@ -320,7 +307,7 @@ socket.on('receive-chat', (data) => {
     if (!box) return;
     const msgDiv = document.createElement('div');
     msgDiv.className = 'chat-bubble-item';
-    msgDiv.innerHTML = `<strong>${data.sender}</strong> <small style="opacity:0.6; font-size:0.8rem">(${data.time})</small>: <p style="margin:4px 0 0 0">${data.message}</p>`;
+    msgDiv.innerHTML = `<strong style="color:#10b981">${data.sender}</strong> <small style="opacity:0.6; font-size:0.75rem">(${data.time})</small>: <p style="margin:4px 0 0 0; color:#f1f5f9">${data.message}</p>`;
     box.appendChild(msgDiv);
     box.scrollTop = box.scrollHeight;
 });
