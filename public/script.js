@@ -17,7 +17,7 @@ let currentTool = 'pen';
 let currentColor = '#10b981';
 let currentSize = 5;
 
-// 1️⃣ بداية التشغيل وقراءة الحساب أوتوماتيكياً
+// بداية التشغيل وقراءة الحساب
 window.addEventListener('DOMContentLoaded', () => {
     const savedName = localStorage.getItem('alboulaqi_user_name');
     const savedPic = localStorage.getItem('alboulaqi_user_pic');
@@ -76,7 +76,6 @@ if (userPicInput) {
     });
 }
 
-// ⚙️ نافذة الإعدادات
 function openSettingsModal() {
     const nameInput = document.getElementById('modal-username-input');
     const imgPreview = document.getElementById('modal-preview-img');
@@ -90,22 +89,6 @@ function openSettingsModal() {
 function closeSettingsModal() {
     const modal = document.getElementById('settings-modal');
     if (modal) modal.classList.add('hidden');
-}
-
-const modalPicInput = document.getElementById('modal-userpic-input');
-if (modalPicInput) {
-    modalPicInput.addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                userPic = evt.target.result;
-                const imgPreview = document.getElementById('modal-preview-img');
-                if (imgPreview) imgPreview.src = userPic;
-            };
-            reader.readAsDataURL(file);
-        }
-    });
 }
 
 function saveSettingsChanges() {
@@ -193,7 +176,7 @@ function leaveRoom() {
     }
 }
 
-// 3️⃣ التنقل بين التبويبات والمزامنة
+// 3️⃣ التنقل وإصلاح عرض الحضور
 function switchTab(tab) {
     activeTab = tab;
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
@@ -220,18 +203,19 @@ function switchTab(tab) {
 
 socket.on('sync-tab', (tab) => switchTab(tab));
 
+// تحديث عرض قائمة الحضور لكل الناس فوراً
 socket.on('update-users', (users) => {
     const grid = document.getElementById('users-grid');
     if (!grid || !Array.isArray(users)) return;
     grid.innerHTML = users.map(u => `
         <div class="user-card">
             <img src="${u.pic || userPic}">
-            <h4>${u.name} ${u.isHost ? '👑' : ''}</h4>
+            <h4>${u.name} ${u.isHost ? '👑 (Host)' : ''}</h4>
         </div>
     `).join('');
 });
 
-// 4️⃣ السبورة والصفحات التفاعلية
+// 4️⃣ السبورة
 function resizeCanvas() {
     if (!canvas || !canvas.parentElement) return;
     canvas.width = canvas.parentElement.clientWidth;
@@ -417,7 +401,7 @@ function loadPDF(event) {
     reader.readAsArrayBuffer(file);
 }
 
-// 5️⃣ الشات المباشر والمرفقات
+// 5️⃣ إصلاح عرض الرسائل للشخص نفسه وللجميع
 function sendChatMessage() {
     const input = document.getElementById('chat-input');
     if (!input) return;
@@ -459,11 +443,12 @@ function handleChatKey(e) {
     if (e.key === 'Enter') sendChatMessage();
 }
 
+// استقبال وتنفيذ إظهار الرسائل عند الراسل والمستقبل
 socket.on('receive-chat', (data) => {
     const box = document.getElementById('chat-messages');
     if (!box) return;
 
-    if (activeTab !== 'chat') {
+    if (activeTab !== 'chat' && data.sender !== userName) {
         unreadChatCount++;
         const badge = document.getElementById('chat-badge');
         if (badge) {
@@ -489,7 +474,7 @@ socket.on('receive-chat', (data) => {
     box.scrollTop = box.scrollHeight;
 });
 
-// 6️⃣ وظائف الكاميرا والشاشة واليد
+// 6️⃣ الكاميرا والليزر
 function raiseHand() {
     socket.emit('raise-hand', { roomId: currentRoomId, userName });
     alert('تم إرسال طلب الكلمة للمحاضر ✋');
