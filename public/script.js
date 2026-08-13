@@ -5,7 +5,7 @@ let isHost = false;
 let userName = "";
 let userPic = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
 let localStream = null;
-const peerConnections = {}; // تخزين علاقات الفيديو مع كل حاضر
+const peerConnections = {};
 
 let unreadChatCount = 0;
 let activeTab = 'main';
@@ -205,7 +205,7 @@ function switchTab(tab) {
 
 socket.on('sync-tab', (tab) => switchTab(tab));
 
-// 👥 الحضور وتحديث الشبكة
+// 👥 الحضور والشبكة
 function renderUsersGrid(users) {
     const grid = document.getElementById('users-grid');
     if (!grid || !Array.isArray(users)) return;
@@ -249,7 +249,6 @@ socket.on('update-users', (users) => {
     currentUsersList = users;
     renderUsersGrid(users);
 
-    // إنشاء اتصالات الفيديو مع كل الحاضرين الجدد
     users.forEach(u => {
         if (u.id !== socket.id && !peerConnections[u.id]) {
             createPeerConnection(u.id, true);
@@ -270,15 +269,21 @@ socket.on('sync-initial-state', ({ messages, currentTab, users }) => {
     if (currentTab) switchTab(currentTab);
 });
 
-// 📹📹 WebRTC (مشاهدة كاميرات بعض المباشرة)
+// 📹📹 تشغيل الميديا المحلية وربط أجهزة الحاضرين بها
 async function startLocalCamera() {
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        const video = document.getElementById('my-pip-video');
-        if (video) video.srcObject = localStream;
+        
+        // عرض الفيديو المترابط بالـ Pip والـ Grid
+        const pipVideo = document.getElementById('my-pip-video');
+        if (pipVideo) {
+            pipVideo.srcObject = localStream;
+            pipVideo.play().catch(() => {});
+        }
+        
         addVideoStream('local-user', localStream, userName + ' (أنت)');
     } catch (e) {
-        console.log('الكاميرا غير متاحة:', e);
+        alert('يرجى إعطاء الإذن للمتصفح للوصول إلى الكاميرا والمايك');
     }
 }
 
@@ -362,6 +367,7 @@ function addVideoStream(id, stream, name) {
     const video = document.getElementById(`cam-video-${id}`);
     if (video && video.srcObject !== stream) {
         video.srcObject = stream;
+        video.play().catch(() => {});
     }
 }
 
@@ -432,8 +438,8 @@ function makeElementDraggable(elmnt) {
 
     function touchDrag(e) {
         const touch = e.touches[0];
-        pos1 = touch.clientX;
-        pos2 = touch.clientY;
+        pos1 = pos3 - touch.clientX;
+        pos2 = pos4 - touch.clientY;
         elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
         elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
         elmnt.style.bottom = 'auto';
