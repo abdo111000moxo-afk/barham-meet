@@ -10,7 +10,7 @@
 </head>
 <body>
 
-    <!-- 1. تسجيل الدخول -->
+    <!-- 1. شاشة تسجيل الدخول -->
     <div id="login-screen" class="screen">
         <div class="login-card">
             <h2><i class="fa-solid fa-video text-emerald"></i> Al-Boulaqi Meet</h2>
@@ -117,7 +117,9 @@
                     </button>
                 </nav>
 
+                <!-- أزرار الميديا والتسجيل الشامل -->
                 <div class="media-controls-box mb-3">
+                    <button class="btn btn-danger btn-sm btn-block mb-2" id="record-btn" onclick="toggleFullMeetingRecording()"><i class="fa-solid fa-circle"></i> بدء تسجيل المحاضرة كاملاً</button>
                     <button class="btn btn-secondary btn-sm btn-block mb-1" id="toggle-mic-btn" onclick="toggleLocalAudio()"><i class="fa-solid fa-microphone"></i> الميكروفون: مفعل</button>
                     <button class="btn btn-secondary btn-sm btn-block mb-1" id="toggle-cam-btn" onclick="toggleLocalVideo()"><i class="fa-solid fa-video"></i> الكاميرا: مفعله</button>
                     <button class="btn btn-primary btn-sm btn-block" id="toggle-pip-btn" onclick="toggleFloatingCam()"><i class="fa-solid fa-circle-user"></i> الكاميرا المنبثقة</button>
@@ -131,6 +133,17 @@
 
             <div class="main-wrapper">
                 <header class="top-header">
+                    <!-- لوحة التحكم بالصلاحيات وأوضاع العرض للمنشئ فقط -->
+                    <div class="host-only host-quick-toolbar">
+                        <label title="السماح للحضور بالرسم على السبورة"><input type="checkbox" id="perm-draw" onchange="updateRoomPermissions()"> 🎨 الرسم</label>
+                        <label title="السماح بالحضور بالتحدث"><input type="checkbox" id="perm-mic" checked onchange="updateRoomPermissions()"> 🎙️ المايك</label>
+                        <label title="السماح بالحضور بفتح الكاميرا"><input type="checkbox" id="perm-cam" checked onchange="updateRoomPermissions()"> 📹 الكاميرا</label>
+                        <select id="cam-view-mode" onchange="changeCamViewMode(this.value)">
+                            <option value="grid">👥 وضع الجميع (Grid)</option>
+                            <option value="focus">👑 وضع المنشئ فقط (Focus)</option>
+                        </select>
+                    </div>
+
                     <div class="room-code-badge">
                         كود الغرفة: <strong id="current-room-id">------</strong>
                     </div>
@@ -184,7 +197,7 @@
                         </div>
                     </section>
 
-                    <!-- تبويب الكاميرات المباشرة لكل الانضمامات -->
+                    <!-- تبويب الكاميرات المباشرة -->
                     <section id="tab-cameras" class="tab-content">
                         <h3><i class="fa-solid fa-video"></i> بث الكاميرات المباشر</h3>
                         <div class="cameras-grid" id="cameras-grid"></div>
@@ -196,7 +209,6 @@
                             <button class="btn btn-primary host-only" onclick="startScreenShare()"><i class="fa-solid fa-desktop"></i> بدء مشاركة الشاشة</button>
                             <button class="btn btn-warning" id="presentation-btn" onclick="togglePresentation()"><i class="fa-solid fa-expand"></i> وضعية الشرح للجميع</button>
                             <button class="btn btn-secondary" id="laser-btn" onclick="toggleLaser()"><i class="fa-solid fa-wand-magic-sparkles"></i> مؤشر الليزر</button>
-                            <button class="btn btn-danger host-only" id="record-btn" onclick="toggleRecording()"><i class="fa-solid fa-circle"></i> بدء تسجيل المحاضرة</button>
                         </div>
                         <div class="screen-fullscreen-wrapper" id="screen-wrapper">
                             <video id="shared-screen-video" autoplay playsinline></video>
@@ -227,7 +239,7 @@
         </div>
     </div>
 
-    <!-- 🎥 الكاميرا المنبثقة العائمة (تأكيد ربط المسمى مع my-pip-video) -->
+    <!-- 🎥 الكاميرا المنبثقة العائمة -->
     <div id="floating-cam-box" class="floating-cam-wrapper hidden">
         <div class="floating-cam-header" id="floating-cam-handle">
             <i class="fa-solid fa-up-down-left-right"></i>

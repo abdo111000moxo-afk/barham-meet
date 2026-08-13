@@ -16,7 +16,7 @@ const rooms = {};
 
 io.on('connection', (socket) => {
 
-    // 1️⃣ إنشاء غرفة
+    // 1️⃣ إنشاء غرفة جديدة
     socket.on('create-room', ({ userName, userPic, roomId }, callback) => {
         socket.join(roomId);
         socket.roomId = roomId;
@@ -24,16 +24,22 @@ io.on('connection', (socket) => {
         socket.isHost = true;
         
         if (!rooms[roomId]) {
-            rooms[roomId] = { users: [], messages: [], currentTab: 'main' };
+            rooms[roomId] = { 
+                users: [], 
+                messages: [], 
+                currentTab: 'main',
+                permissions: { canDraw: false, canMic: true, canCam: true },
+                viewMode: 'grid'
+            };
         }
 
         rooms[roomId].users = [{ id: socket.id, name: userName, pic: userPic, isHost: true, micMuted: false, camOff: false }];
 
-        if (callback) callback({ success: true, roomId });
+        if (callback) callback({ success: true, roomId, permissions: rooms[roomId].permissions });
         io.to(roomId).emit('update-users', rooms[roomId].users);
     });
 
-    // 2️⃣ انضمام لغرفة
+    // 2️⃣ انضمام للغرفة
     socket.on('join-room', ({ roomId, userName, userPic }, callback) => {
         socket.join(roomId);
         socket.roomId = roomId;
@@ -41,7 +47,13 @@ io.on('connection', (socket) => {
         socket.isHost = false;
 
         if (!rooms[roomId]) {
-            rooms[roomId] = { users: [], messages: [], currentTab: 'main' };
+            rooms[roomId] = { 
+                users: [], 
+                messages: [], 
+                currentTab: 'main',
+                permissions: { canDraw: false, canMic: true, canCam: true },
+                viewMode: 'grid'
+            };
         }
 
         const existing = rooms[roomId].users.find(u => u.id === socket.id);
@@ -49,22 +61,24 @@ io.on('connection', (socket) => {
             rooms[roomId].users.push({ id: socket.id, name: userName, pic: userPic, isHost: false, micMuted: false, camOff: false });
         }
 
-        if (callback) callback({ success: true, isHost: false });
+        if (callback) callback({ success: true, isHost: false, permissions: rooms[roomId].permissions });
 
-        // إرسال التحديث لجميع الحضور
+        // إرسال تحديث الحضور المباشر
         io.to(roomId).emit('update-users', rooms[roomId].users);
 
-        // تنبيه الباقين بوجود عضو جديد لبدء اتصال الفيديو فوراً
-        socket.to(roomId).emit('user-joined-webrtc', { userId: socket.id, userName, userPic });
+        // إعلام الجميع بوجود عضو جديد للاتصال بالفيديو (WebRTC)
+        socket.to(roomId).emit('user-joined-webrtc', { userId: socket.id, userName });
 
         socket.emit('sync-initial-state', {
             messages: rooms[roomId].messages,
             currentTab: rooms[roomId].currentTab,
-            users: rooms[roomId].users
+            users: rooms[roomId].users,
+            permissions: rooms[roomId].permissions,
+            viewMode: rooms[roomId].viewMode
         });
     });
 
-    // 📹 3️⃣ إشارات اتصال الفيديو WebRTC
+    // 📹 3️⃣ إشارات WebRTC للصوت والصورة
     socket.on('webrtc-offer', ({ targetId, offer }) => {
         io.to(targetId).emit('webrtc-offer', { senderId: socket.id, offer });
     });
@@ -77,7 +91,23 @@ io.on('connection', (socket) => {
         io.to(targetId).emit('webrtc-ice-candidate', { senderId: socket.id, candidate });
     });
 
-    // 4️⃣ باقي الميزات
+    // 🔐 4️⃣ تحديث الصلاحيات من قِبَل المنشئ
+    socket.on('update-permissions', ({ roomId, permissions }) => {
+        if (rooms[roomId]) {
+            rooms[roomId].permissions = permissions;
+            io.to(roomId).emit('permissions-updated', permissions);
+        }
+    });
+
+    // 🎥 5️⃣ تغيير وضع عرض الكاميرات (Host Focus vs Grid Mode)
+    socket.on('change-view-mode', ({ roomId, mode }) => {
+        if (rooms[roomId]) {
+            rooms[roomId].viewMode = mode;
+            io.to(roomId).emit('view-mode-changed', mode);
+        }
+    });
+
+    // 💬 6️⃣ الشات المباشر
     socket.on('send-chat', (data) => {
         if (data && data.roomId) {
             socket.join(data.roomId);
@@ -86,6 +116,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // 🎙️ 7️⃣ التحكم الفردي بالمايك/الكاميرا
     socket.on('toggle-user-media', ({ roomId, targetUserId, type, state }) => {
         io.to(targetUserId).emit('force-media-control', { type, state });
         if (rooms[roomId]) {
@@ -98,6 +129,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // باقي الأحداث
     socket.on('change-tab', ({ roomId, tab }) => {
         if (rooms[roomId]) rooms[roomId].currentTab = tab;
         socket.to(roomId).emit('sync-tab', tab);

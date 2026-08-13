@@ -255,7 +255,46 @@ body {
 .btn-block { width: 100%; }
 
 .main-wrapper { flex: 1; display: flex; flex-direction: column; background: #0b0f19; }
-.top-header { padding: 12px 24px; background: #1e293b; border-bottom: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: flex-end; }
+
+/* 🛠️ الشريط العلوي للتحكم بالصلاحيات للمشرف */
+.top-header {
+    padding: 12px 24px;
+    background: #1e293b;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.host-quick-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    background: #0f172a;
+    padding: 6px 14px;
+    border-radius: 12px;
+    border: 1px solid #334155;
+    font-size: 0.85rem;
+}
+
+.host-quick-toolbar label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    color: #38bdf8;
+}
+
+.host-quick-toolbar select {
+    background: #1e293b;
+    color: #10b981;
+    border: 1px solid #334155;
+    padding: 4px 8px;
+    border-radius: 8px;
+    outline: none;
+    font-size: 0.85rem;
+}
+
 .room-code-badge { background: #0f172a; padding: 6px 16px; border-radius: 20px; border: 1px solid #334155; color: #10b981; }
 
 .content-body { flex: 1; padding: 0; overflow: hidden; position: relative; }
@@ -326,12 +365,21 @@ body {
 .canvas-fullscreen-container.bg-white { background: #ffffff; }
 .canvas-fullscreen-container.bg-dark { background: #0f172a; }
 
-/* 🎥 شبكة الكاميرات المباشرة */
+/* 🎥 شبكة الكاميرات وأوضاع التركيز */
 .cameras-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 20px;
     padding: 10px;
+}
+
+.cameras-grid.host-focus-mode .viewer-card {
+    display: none !important;
+}
+
+.cameras-grid.host-focus-mode .host-card {
+    grid-column: 1 / -1;
+    height: 450px !important;
 }
 
 .camera-video-card {

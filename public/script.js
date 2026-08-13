@@ -13,10 +13,14 @@ let boardPages = [[]];
 let currentPageIndex = 0;
 let currentUsersList = [];
 
-// متغيرا تسجيل المحاضرة
-let mediaRecorder;
-let recordedChunks = [];
-let isRecording = false;
+// الصلاحيات وأوضاع الرؤية
+let roomPermissions = { canDraw: false, canMic: true, canCam: true };
+let currentViewMode = 'grid';
+
+// تسجيل الاجتماع الشامل
+let fullRecorder;
+let meetingChunks = [];
+let isFullRecording = false;
 
 const canvas = document.getElementById('whiteboard');
 const ctx = canvas ? canvas.getContext('2d') : null;
@@ -32,7 +36,6 @@ const rtcConfig = {
     ]
 };
 
-// 1️⃣ بداية التشغيل وإظهار الشاشات
 window.addEventListener('DOMContentLoaded', () => {
     const savedName = localStorage.getItem('alboulaqi_user_name');
     const savedPic = localStorage.getItem('alboulaqi_user_pic');
@@ -124,7 +127,10 @@ function createRoom() {
     isHost = true;
 
     socket.emit('create-room', { userName, userPic, roomId: generatedId }, (res) => {
-        if (res && res.roomId) currentRoomId = res.roomId;
+        if (res && res.roomId) {
+            currentRoomId = res.roomId;
+            if (res.permissions) roomPermissions = res.permissions;
+        }
     });
 
     applyHostPermissions();
@@ -145,6 +151,7 @@ function joinRoom() {
     socket.emit('join-room', { roomId: currentRoomId, userName, userPic }, (res) => {
         if (res && res.success) {
             isHost = res.isHost || false;
+            if (res.permissions) roomPermissions = res.permissions;
             applyHostPermissions();
             enterRoom();
         } else {
@@ -213,7 +220,52 @@ function switchTab(tab) {
 
 socket.on('sync-tab', (tab) => switchTab(tab));
 
-// 👥 رسم قائمة الحضور
+// 🔐 إدارة الصلاحيات وأوضاع الرؤية
+function updateRoomPermissions() {
+    if (!isHost) return;
+    const canDraw = document.getElementById('perm-draw').checked;
+    const canMic = document.getElementById('perm-mic').checked;
+    const canCam = document.getElementById('perm-cam').checked;
+
+    roomPermissions = { canDraw, canMic, canCam };
+    socket.emit('update-permissions', { roomId: currentRoomId, permissions: roomPermissions });
+}
+
+socket.on('permissions-updated', (perms) => {
+    roomPermissions = perms;
+    if (!isHost) {
+        if (!perms.canMic && localStream) {
+            localStream.getAudioTracks().forEach(t => t.enabled = false);
+        }
+        if (!perms.canCam && localStream) {
+            localStream.getVideoTracks().forEach(t => t.enabled = false);
+        }
+    }
+});
+
+function changeCamViewMode(mode) {
+    if (!isHost) return;
+    currentViewMode = mode;
+    socket.emit('change-view-mode', { roomId: currentRoomId, mode });
+    applyCamViewMode(mode);
+}
+
+socket.on('view-mode-changed', (mode) => {
+    currentViewMode = mode;
+    applyCamViewMode(mode);
+});
+
+function applyCamViewMode(mode) {
+    const grid = document.getElementById('cameras-grid');
+    if (!grid) return;
+    if (mode === 'focus') {
+        grid.classList.add('host-focus-mode');
+    } else {
+        grid.classList.remove('host-focus-mode');
+    }
+}
+
+// 👥 الحضور ورسم الشبكة
 function renderUsersGrid(users) {
     const grid = document.getElementById('users-grid');
     if (!grid || !Array.isArray(users)) return;
@@ -264,11 +316,13 @@ socket.on('user-joined-webrtc', ({ userId }) => {
     }
 });
 
-socket.on('sync-initial-state', ({ messages, currentTab, users }) => {
+socket.on('sync-initial-state', ({ messages, currentTab, users, permissions, viewMode }) => {
     if (users) {
         currentUsersList = users;
         renderUsersGrid(users);
     }
+    if (permissions) roomPermissions = permissions;
+    if (viewMode) applyCamViewMode(viewMode);
     if (messages && Array.isArray(messages)) {
         const box = document.getElementById('chat-messages');
         if (box) box.innerHTML = '';
@@ -277,7 +331,7 @@ socket.on('sync-initial-state', ({ messages, currentTab, users }) => {
     if (currentTab) switchTab(currentTab);
 });
 
-// 📹📹 الصوت والكاميرا عبر WebRTC
+// 📹📹 WebRTC الاتصال المباشر للصوت والفيديو
 async function startLocalCamera() {
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -288,7 +342,7 @@ async function startLocalCamera() {
             pipVideo.play().catch(() => {});
         }
         
-        addVideoStream('local-user', localStream, userName + ' (أنت)');
+        addVideoStream('local-user', localStream, userName + ' (أنت)', isHost);
     } catch (e) {
         console.log('الكاميرا غير متاحة:', e);
     }
@@ -305,7 +359,8 @@ function createPeerConnection(targetId, isOffer) {
     pc.ontrack = (event) => {
         const remoteUser = currentUsersList.find(u => u.id === targetId);
         const name = remoteUser ? remoteUser.name : 'حاضر';
-        addVideoStream(targetId, event.streams[0], name);
+        const isTargetHost = remoteUser ? remoteUser.isHost : false;
+        addVideoStream(targetId, event.streams[0], name, isTargetHost);
     };
 
     pc.onicecandidate = (event) => {
@@ -355,7 +410,7 @@ socket.on('user-disconnected', (userId) => {
     if (card) card.remove();
 });
 
-function addVideoStream(id, stream, name) {
+function addVideoStream(id, stream, name, isUserHost) {
     const grid = document.getElementById('cameras-grid');
     if (!grid) return;
 
@@ -363,7 +418,7 @@ function addVideoStream(id, stream, name) {
     if (!card) {
         card = document.createElement('div');
         card.id = `cam-card-${id}`;
-        card.className = 'camera-video-card';
+        card.className = `camera-video-card ${isUserHost ? 'host-card' : 'viewer-card'}`;
         card.innerHTML = `
             <video id="cam-video-${id}" autoplay playsinline ${id === 'local-user' ? 'muted' : ''}></video>
             <span>${name}</span>
@@ -379,6 +434,7 @@ function addVideoStream(id, stream, name) {
 }
 
 function toggleLocalAudio() {
+    if (!isHost && !roomPermissions.canMic) return alert('المنظم أغلق الميكروفون عن الحضور');
     if (!localStream) return;
     const track = localStream.getAudioTracks()[0];
     if (track) {
@@ -389,6 +445,7 @@ function toggleLocalAudio() {
 }
 
 function toggleLocalVideo() {
+    if (!isHost && !roomPermissions.canCam) return alert('المنظم أغلق الكاميرا عن الحضور');
     if (!localStream) return;
     const track = localStream.getVideoTracks()[0];
     if (track) {
@@ -445,8 +502,8 @@ function makeElementDraggable(elmnt) {
 
     function touchDrag(e) {
         const touch = e.touches[0];
-        pos1 = touch.clientX;
-        pos2 = touch.clientY;
+        pos1 = pos3 - touch.clientX;
+        pos2 = pos4 - touch.clientY;
         elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
         elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
         elmnt.style.bottom = 'auto';
@@ -459,58 +516,59 @@ function makeElementDraggable(elmnt) {
     }
 }
 
-// 🎬 🎥 تسجيل المحاضرة (تمت الاستعادة بنجاح!)
-async function toggleRecording() {
+// 🎥🎬 تسجيل المحاضرة بالكامل (Full Meeting Video & Audio Recorder)
+async function toggleFullMeetingRecording() {
     const recordBtn = document.getElementById('record-btn');
 
-    if (!isRecording) {
+    if (!isFullRecording) {
         try {
-            const stream = await navigator.mediaDevices.getDisplayMedia({
-                video: { mediaSource: "screen" },
+            // تسجيل شاشة الاجتماع بالكامل مع صوت النظام وصوت الميكروفون
+            const screenStream = await navigator.mediaDevices.getDisplayMedia({
+                video: { displaySurface: "browser" },
                 audio: true
             });
 
-            recordedChunks = [];
-            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+            meetingChunks = [];
+            fullRecorder = new MediaRecorder(screenStream, { mimeType: 'video/webm' });
 
-            mediaRecorder.ondataavailable = (e) => {
-                if (e.data.size > 0) recordedChunks.push(e.data);
+            fullRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) meetingChunks.push(e.data);
             };
 
-            mediaRecorder.onstop = saveRecording;
-            mediaRecorder.start();
-            isRecording = true;
+            fullRecorder.onstop = saveFullMeetingRecording;
+            fullRecorder.start();
+            isFullRecording = true;
 
             if (recordBtn) {
-                recordBtn.innerHTML = '<i class="fa-solid fa-square"></i> إيقاف وحفظ التسجيل';
+                recordBtn.innerHTML = '<i class="fa-solid fa-square"></i> إيقاف وحفظ المحاضرة';
                 recordBtn.style.backgroundColor = '#dc2626';
             }
 
-            stream.getVideoTracks()[0].onended = () => {
-                if (isRecording) toggleRecording();
+            screenStream.getVideoTracks()[0].onended = () => {
+                if (isFullRecording) toggleFullMeetingRecording();
             };
 
         } catch (err) {
-            alert('لم يتم السماح بتسجيل الشاشة.');
+            alert('يرجى اختيار الشاشة بالكامل لتسجيل الاجتماع بصوته وصورته');
         }
     } else {
-        mediaRecorder.stop();
-        isRecording = false;
+        fullRecorder.stop();
+        isFullRecording = false;
 
         if (recordBtn) {
-            recordBtn.innerHTML = '<i class="fa-solid fa-circle"></i> بدء تسجيل المحاضرة';
+            recordBtn.innerHTML = '<i class="fa-solid fa-circle"></i> بدء تسجيل المحاضرة كاملاً';
             recordBtn.style.backgroundColor = '';
         }
     }
 }
 
-function saveRecording() {
-    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+function saveFullMeetingRecording() {
+    const blob = new Blob(meetingChunks, { type: 'video/webm' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.style.display = 'none';
     a.href = url;
-    a.download = `محاضرة-Al-Boulaqi-Meet.webm`;
+    a.download = `محاضرة-Al-Boulaqi-Meet-كاملة.webm`;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => {
@@ -599,7 +657,7 @@ socket.on('receive-chat', (data) => {
     appendMessageToDOM(data);
 });
 
-// السبورة والمشاركة
+// السبورة التفاعلية
 function resizeCanvas() {
     if (!canvas || !canvas.parentElement) return;
     canvas.width = canvas.parentElement.clientWidth;
@@ -609,11 +667,11 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 
 if (canvas) {
-    canvas.addEventListener('mousedown', () => drawing = true);
+    canvas.addEventListener('mousedown', () => { if (isHost || roomPermissions.canDraw) drawing = true; });
     canvas.addEventListener('mouseup', () => { drawing = false; if(ctx) ctx.beginPath(); });
     canvas.addEventListener('mousemove', draw);
 
-    canvas.addEventListener('touchstart', (e) => { drawing = true; drawTouch(e); });
+    canvas.addEventListener('touchstart', (e) => { if (isHost || roomPermissions.canDraw) { drawing = true; drawTouch(e); } });
     canvas.addEventListener('touchend', () => { drawing = false; if(ctx) ctx.beginPath(); });
     canvas.addEventListener('touchmove', drawTouch);
 }
@@ -684,6 +742,7 @@ function updatePageDisplay() {
 }
 
 function addBoardPage() {
+    if (!isHost) return alert('إضافة الصفحات للمنظم فقط');
     boardPages.push([]);
     currentPageIndex = boardPages.length - 1;
     clearCanvasScreen();
@@ -735,6 +794,7 @@ function redrawCurrentPage() {
 }
 
 function clearBoard() {
+    if (!isHost) return;
     boardPages[currentPageIndex] = [];
     clearCanvasScreen();
     socket.emit('clear-board', { roomId: currentRoomId });
