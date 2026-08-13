@@ -17,7 +17,6 @@ let currentTool = 'pen';
 let currentColor = '#10b981';
 let currentSize = 5;
 
-// 1️⃣ فحص الرابط عند الفتح أوتوماتيكياً (حل مشكلة الرابط)
 window.addEventListener('DOMContentLoaded', () => {
     const savedName = localStorage.getItem('alboulaqi_user_name');
     const savedPic = localStorage.getItem('alboulaqi_user_pic');
@@ -27,14 +26,12 @@ window.addEventListener('DOMContentLoaded', () => {
         if (savedPic) userPic = savedPic;
         updateHomeUI();
         
-        // التقاط كود الغرفة من الرابط إذا وجد (?room=xxxx)
         const urlParams = new URLSearchParams(window.location.search);
         const roomIdFromUrl = urlParams.get('room');
         
         if (roomIdFromUrl) {
             const roomInput = document.getElementById('room-id-input');
             if (roomInput) roomInput.value = roomIdFromUrl;
-            // انضمام تلقائي عبر الرابط
             setTimeout(() => { joinRoom(); }, 300);
         } else {
             showScreen('home-screen');
@@ -56,7 +53,6 @@ function saveInitialProfile() {
 
     updateHomeUI();
 
-    // فحص لو جاي من رابط مباشر
     const urlParams = new URLSearchParams(window.location.search);
     const roomIdFromUrl = urlParams.get('room');
     if (roomIdFromUrl) {
@@ -76,20 +72,6 @@ function updateHomeUI() {
     if (imgEl) imgEl.src = userPic;
 }
 
-const userPicInput = document.getElementById('userpic-input');
-if (userPicInput) {
-    userPicInput.addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(evt) { 
-                userPic = evt.target.result;
-            };
-            reader.readAsDataURL(file);
-        }
-    });
-}
-
 function openSettingsModal() {
     const nameInput = document.getElementById('modal-username-input');
     const imgPreview = document.getElementById('modal-preview-img');
@@ -103,22 +85,6 @@ function openSettingsModal() {
 function closeSettingsModal() {
     const modal = document.getElementById('settings-modal');
     if (modal) modal.classList.add('hidden');
-}
-
-const modalPicInput = document.getElementById('modal-userpic-input');
-if (modalPicInput) {
-    modalPicInput.addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(evt) { 
-                userPic = evt.target.result;
-                const imgPreview = document.getElementById('modal-preview-img');
-                if (imgPreview) imgPreview.src = userPic;
-            };
-            reader.readAsDataURL(file);
-        }
-    });
 }
 
 function saveSettingsChanges() {
@@ -202,7 +168,7 @@ function leaveRoom() {
     if (confirm('هل أنت تأكد من الخروج من الغرفة؟')) {
         if (localStream) localStream.getTracks().forEach(t => t.stop());
         socket.emit('leave-room', { roomId: currentRoomId });
-        window.location.href = window.location.origin; // العودة للصفحة الرئيسية بدون كود غرفة بالرابط
+        window.location.href = window.location.origin;
     }
 }
 
@@ -228,6 +194,7 @@ function switchTab(tab) {
 
     if (tab === 'whiteboard') setTimeout(resizeCanvas, 50);
 
+    // إذا كان المضيف، يتم إرسال طلب تحويل التبويب لجميع الحضور
     if (isHost) {
         socket.emit('change-tab', { roomId: currentRoomId, tab });
     }
@@ -246,7 +213,7 @@ socket.on('update-users', (users) => {
     `).join('');
 });
 
-// ------------ السبورة ------------
+// ------------ السبورة والزامن ------------
 function resizeCanvas() {
     if (!canvas || !canvas.parentElement) return;
     canvas.width = canvas.parentElement.clientWidth;
@@ -434,7 +401,7 @@ function loadPDF(event) {
     reader.readAsArrayBuffer(file);
 }
 
-// 2️⃣ إظهار الشات المباشر أوتوماتيكياً (حل مشكلة الرسائل)
+// ------------ الشات المباشر الموحد ------------
 function renderChatMessage(data) {
     const box = document.getElementById('chat-messages');
     if (!box) return;
@@ -480,10 +447,6 @@ function sendChatMessage() {
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    // إظهار الرسالة فوراً في الشاشة المحلية للراسل
-    renderChatMessage(chatData);
-
-    // إرسال الرسالة للسيرفر للآخرين
     socket.emit('send-chat', chatData);
     input.value = '';
 }
@@ -505,7 +468,6 @@ function sendChatFile(event) {
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
 
-        renderChatMessage(chatData);
         socket.emit('send-chat', chatData);
     };
     reader.readAsDataURL(file);
@@ -515,14 +477,11 @@ function handleChatKey(e) {
     if (e.key === 'Enter') sendChatMessage();
 }
 
+// السيرفر يبعت الرسالة للجميع (المستلم والراسل)
 socket.on('receive-chat', (data) => {
-    // عدم تكرار الرسالة إذا كانت قادمة من نفس المستخدم
-    if (data.sender !== userName) {
-        renderChatMessage(data);
-    }
+    renderChatMessage(data);
 });
 
-// باقي الدوال السابقة
 function raiseHand() {
     socket.emit('raise-hand', { roomId: currentRoomId, userName });
     alert('تم إرسال طلب الكلمة للمحاضر ✋');
@@ -593,66 +552,3 @@ function togglePresentation() {
 socket.on('presentation-mode', (active) => {
     document.body.classList.toggle('presentation-mode', active);
 });
-
-let mediaRecorder;
-let recordedChunks = [];
-let isRecording = false;
-
-async function toggleRecording() {
-    const recordBtn = document.getElementById('record-btn');
-
-    if (!isRecording) {
-        try {
-            const stream = await navigator.mediaDevices.getDisplayMedia({
-                video: { mediaSource: "screen" },
-                audio: true
-            });
-
-            recordedChunks = [];
-            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-
-            mediaRecorder.ondataavailable = (e) => {
-                if (e.data.size > 0) recordedChunks.push(e.data);
-            };
-
-            mediaRecorder.onstop = saveRecording;
-            mediaRecorder.start();
-            isRecording = true;
-
-            if (recordBtn) {
-                recordBtn.innerHTML = '<i class="fa-solid fa-square"></i> إيقاف وحفظ التسجيل';
-                recordBtn.style.backgroundColor = '#dc2626';
-            }
-
-            stream.getVideoTracks()[0].onended = () => {
-                if (isRecording) toggleRecording();
-            };
-
-        } catch (err) {
-            alert('لم يتم السماح بتسجيل الشاشة.');
-        }
-    } else {
-        mediaRecorder.stop();
-        isRecording = false;
-
-        if (recordBtn) {
-            recordBtn.innerHTML = '<i class="fa-solid fa-circle"></i> بدء تسجيل المحاضرة';
-            recordBtn.style.backgroundColor = '';
-        }
-    }
-}
-
-function saveRecording() {
-    const blob = new Blob(recordedChunks, { type: 'video/webm' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = url;
-    a.download = `محاضرة-Al-Boulaqi-Meet.webm`;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-    }, 100);
-}
