@@ -5,6 +5,12 @@ let userName = "";
 let userPic = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
 let localStream = null;
 
+// الإشعارات والصفحات
+let unreadChatCount = 0;
+let activeTab = 'main';
+let boardPages = [[]]; // تخزين خطوط الرسم لكل صفحة
+let currentPageIndex = 0;
+
 // السبورة
 const canvas = document.getElementById('whiteboard');
 const ctx = canvas ? canvas.getContext('2d') : null;
@@ -17,6 +23,7 @@ function resizeCanvas() {
     if (!canvas || !canvas.parentElement) return;
     canvas.width = canvas.parentElement.clientWidth;
     canvas.height = canvas.parentElement.clientHeight;
+    redrawCurrentPage();
 }
 window.addEventListener('resize', resizeCanvas);
 
@@ -137,7 +144,9 @@ function leaveRoom() {
     }
 }
 
+// التنقل بين التبويبات + مسح الإشعارات عند فتح الشات
 function switchTab(tab) {
+    activeTab = tab;
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
@@ -146,6 +155,15 @@ function switchTab(tab) {
 
     if (btn) btn.classList.add('active');
     if (content) content.classList.add('active');
+
+    if (tab === 'chat') {
+        unreadChatCount = 0;
+        const badge = document.getElementById('chat-badge');
+        if (badge) {
+            badge.textContent = '0';
+            badge.classList.add('hidden');
+        }
+    }
 
     if (tab === 'whiteboard') setTimeout(resizeCanvas, 50);
 
@@ -167,7 +185,7 @@ socket.on('update-users', (users) => {
     `).join('');
 });
 
-// ------------ السبورة ------------
+// ------------ السبورة وجمع الصفحات ------------
 if (canvas) {
     canvas.addEventListener('mousedown', () => drawing = true);
     canvas.addEventListener('mouseup', () => { drawing = false; if(ctx) ctx.beginPath(); });
@@ -206,22 +224,29 @@ function executeDraw(x, y) {
     currentColor = colorEl ? colorEl.value : '#10b981';
     currentSize = sizeEl ? sizeEl.value : 5;
 
+    const lineStyle = (currentTool === 'eraser') ? '#ffffff' : currentColor;
+
     ctx.lineWidth = currentSize;
     ctx.lineCap = 'round';
-    ctx.strokeStyle = (currentTool === 'eraser') ? '#ffffff' : currentColor;
+    ctx.strokeStyle = lineStyle;
 
     ctx.lineTo(x, y);
     ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(x, y);
 
+    // حفظ الخط في الصفحة الحالية
+    if (!boardPages[currentPageIndex]) boardPages[currentPageIndex] = [];
+    boardPages[currentPageIndex].push({ x, y, color: lineStyle, size: currentSize });
+
     socket.emit('draw-board', {
         roomId: currentRoomId,
-        drawData: { x, y, color: ctx.strokeStyle, size: currentSize }
+        drawData: { x, y, color: lineStyle, size: currentSize, pageIndex: currentPageIndex }
     });
 }
 
-socket.on('draw-board', ({ x, y, color, size }) => {
+socket.on('draw-board', ({ x, y, color, size, pageIndex }) => {
+    if (pageIndex !== currentPageIndex) return;
     if (!ctx) return;
     ctx.lineWidth = size;
     ctx.lineCap = 'round';
@@ -232,35 +257,95 @@ socket.on('draw-board', ({ x, y, color, size }) => {
     ctx.moveTo(x, y);
 });
 
-function clearBoard() {
+// إدارة الصفحات
+function updatePageDisplay() {
+    const pageDisplay = document.getElementById('page-num-display');
+    if (pageDisplay) {
+        pageDisplay.textContent = `${currentPageIndex + 1} / ${boardPages.length}`;
+    }
+}
+
+function addBoardPage() {
+    boardPages.push([]);
+    currentPageIndex = boardPages.length - 1;
+    clearCanvasScreen();
+    updatePageDisplay();
+    socket.emit('change-page', { roomId: currentRoomId, pageIndex: currentPageIndex, totalPages: boardPages.length });
+}
+
+function prevBoardPage() {
+    if (currentPageIndex > 0) {
+        currentPageIndex--;
+        redrawCurrentPage();
+        updatePageDisplay();
+        socket.emit('change-page', { roomId: currentRoomId, pageIndex: currentPageIndex, totalPages: boardPages.length });
+    }
+}
+
+function nextBoardPage() {
+    if (currentPageIndex < boardPages.length - 1) {
+        currentPageIndex++;
+        redrawCurrentPage();
+        updatePageDisplay();
+        socket.emit('change-page', { roomId: currentRoomId, pageIndex: currentPageIndex, totalPages: boardPages.length });
+    }
+}
+
+socket.on('change-page', ({ pageIndex, totalPages }) => {
+    while (boardPages.length < totalPages) boardPages.push([]);
+    currentPageIndex = pageIndex;
+    redrawCurrentPage();
+    updatePageDisplay();
+});
+
+function clearCanvasScreen() {
     if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
-    socket.emit('clear-board', currentRoomId);
+}
+
+function redrawCurrentPage() {
+    clearCanvasScreen();
+    const currentLines = boardPages[currentPageIndex] || [];
+    currentLines.forEach(line => {
+        ctx.lineWidth = line.size;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = line.color;
+        ctx.lineTo(line.x, line.y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(line.x, line.y);
+    });
+}
+
+function clearBoard() {
+    boardPages[currentPageIndex] = [];
+    clearCanvasScreen();
+    socket.emit('clear-board', { roomId: currentRoomId, pageIndex: currentPageIndex });
 }
 
 socket.on('clear-board', () => {
-    if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    boardPages[currentPageIndex] = [];
+    clearCanvasScreen();
 });
 
 function changeBoardBg(bgClass) {
     const container = document.getElementById('canvas-container');
-    if (container) container.className = 'canvas-container ' + bgClass;
+    if (container) container.className = 'canvas-fullscreen-container ' + bgClass;
     socket.emit('change-bg', { roomId: currentRoomId, bgClass });
 }
 
 socket.on('change-bg', (bgClass) => {
     const container = document.getElementById('canvas-container');
-    if (container) container.className = 'canvas-container ' + bgClass;
+    if (container) container.className = 'canvas-fullscreen-container ' + bgClass;
 });
 
 function downloadBoard() {
     if (!canvas) return;
     const link = document.createElement('a');
-    link.download = 'Al-Boulaqi-Whiteboard.png';
+    link.download = `Al-Boulaqi-Board-Page-${currentPageIndex + 1}.png`;
     link.href = canvas.toDataURL();
     link.click();
 }
 
-// ------------ رفع ملف PDF ------------
 function loadPDF(event) {
     const file = event.target.files[0];
     if (!file || file.type !== 'application/pdf') return alert('اختر ملف PDF صحيح');
@@ -282,7 +367,7 @@ function loadPDF(event) {
     reader.readAsArrayBuffer(file);
 }
 
-// ------------ الشات المباشر المحدث ------------
+// ------------ الشات والملفات والإشعارات ------------
 function sendChatMessage() {
     const input = document.getElementById('chat-input');
     if (!input) return;
@@ -293,9 +378,31 @@ function sendChatMessage() {
         roomId: currentRoomId,
         sender: userName,
         message: msg,
+        fileUrl: null,
+        fileType: null,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     });
     input.value = '';
+}
+
+function sendChatFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        const isImage = file.type.startsWith('image/');
+        socket.emit('send-chat', {
+            roomId: currentRoomId,
+            sender: userName,
+            message: `مرفق: ${file.name}`,
+            fileUrl: evt.target.result,
+            fileType: isImage ? 'image' : 'file',
+            fileName: file.name,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+    };
+    reader.readAsDataURL(file);
 }
 
 function handleChatKey(e) {
@@ -305,14 +412,35 @@ function handleChatKey(e) {
 socket.on('receive-chat', (data) => {
     const box = document.getElementById('chat-messages');
     if (!box) return;
+
+    // زيادة عداد الإشعارات لو المستخدم مش فاتح تبويب الشات
+    if (activeTab !== 'chat') {
+        unreadChatCount++;
+        const badge = document.getElementById('chat-badge');
+        if (badge) {
+            badge.textContent = unreadChatCount;
+            badge.classList.remove('hidden');
+        }
+    }
+
     const msgDiv = document.createElement('div');
     msgDiv.className = 'chat-bubble-item';
-    msgDiv.innerHTML = `<strong style="color:#10b981">${data.sender}</strong> <small style="opacity:0.6; font-size:0.75rem">(${data.time})</small>: <p style="margin:4px 0 0 0; color:#f1f5f9">${data.message}</p>`;
+
+    let fileHTML = '';
+    if (data.fileUrl) {
+        if (data.fileType === 'image') {
+            fileHTML = `<br><img src="${data.fileUrl}" style="max-width:100%; border-radius:8px; margin-top:8px;">`;
+        } else {
+            fileHTML = `<br><a href="${data.fileUrl}" download="${data.fileName || 'file'}" class="btn-chat-file"><i class="fa-solid fa-download"></i> تحميل ${data.fileName || 'الملف'}</a>`;
+        }
+    }
+
+    msgDiv.innerHTML = `<strong style="color:#10b981">${data.sender}</strong> <small style="opacity:0.6; font-size:0.75rem">(${data.time})</small>: <p style="margin:4px 0 0 0; color:#f1f5f9">${data.message}</p>${fileHTML}`;
     box.appendChild(msgDiv);
     box.scrollTop = box.scrollHeight;
 });
 
-// ------------ طلب الكلمة / رفع اليد ------------
+// ------------ باقي الميزات السابقة ------------
 function raiseHand() {
     socket.emit('raise-hand', { roomId: currentRoomId, userName });
     alert('تم إرسال طلب الكلمة للمحاضر ✋');
@@ -322,7 +450,6 @@ socket.on('notify-hand', (name) => {
     alert(`✋ ${name} يطلب الكلمة الآن!`);
 });
 
-// ------------ الكاميرات ومشاركة الشاشة ------------
 function startLocalCamera() {
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
         .then(stream => {
@@ -341,7 +468,6 @@ function startScreenShare() {
         }).catch(() => {});
 }
 
-// ------------ مؤشر الليزر ------------
 let laserActive = false;
 function toggleLaser() {
     laserActive = !laserActive;
@@ -374,7 +500,6 @@ function moveLaser(x, y, visible) {
 
 socket.on('laser-move', ({ x, y, visible }) => moveLaser(x, y, visible));
 
-// ------------ وضعية الشرح ------------
 let presentationActive = false;
 function togglePresentation() {
     if (!isHost) return alert('هذه الميزة لمنشئ الغرفة فقط');
@@ -387,7 +512,6 @@ socket.on('presentation-mode', (active) => {
     document.body.classList.toggle('presentation-mode', active);
 });
 
-// ------------ تسجيل المحاضرة ------------
 let mediaRecorder;
 let recordedChunks = [];
 let isRecording = false;

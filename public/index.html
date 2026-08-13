@@ -34,11 +34,11 @@
         </div>
     </div>
 
-    <!-- 2. شاشة رابط الغرفة -->
+    <!-- 2. شاشة مشاركة الرابط -->
     <div id="share-screen" class="screen">
         <div class="login-card text-center">
             <h3>تم إنشاء الغرفة بنجاح! 🎉</h3>
-            <p>شارك هذا الرابط مع الحضور لإنضمامهم:</p>
+            <p>شارك هذا الرابط مع الحضور للانضمام:</p>
             <div class="link-box">
                 <input type="text" id="created-room-link" readonly>
                 <button class="btn btn-copy" onclick="copyRoomLink()"><i class="fa-regular fa-copy"></i> نسخ</button>
@@ -47,7 +47,7 @@
         </div>
     </div>
 
-    <!-- 3. الواجهة الرئيسية بالتصميم الجانبي المحدث -->
+    <!-- 3. الواجهة الرئيسية بالتصميم المطور -->
     <div id="room-screen" class="screen">
         <div class="app-layout">
             
@@ -71,8 +71,9 @@
                     <button class="nav-item" data-tab="screen" onclick="switchTab('screen')">
                         <i class="fa-solid fa-desktop"></i> مشاركة الشاشة
                     </button>
-                    <button class="nav-item" data-tab="chat" onclick="switchTab('chat')">
-                        <i class="fa-solid fa-comments"></i> المحادثة المباشرة
+                    <button class="nav-item nav-item-chat" data-tab="chat" onclick="switchTab('chat')">
+                        <i class="fa-solid fa-comments"></i> المحادثة
+                        <span id="chat-badge" class="badge-unread hidden">0</span>
                     </button>
                     <button class="nav-item" data-tab="profile" onclick="switchTab('profile')">
                         <i class="fa-solid fa-user-gear"></i> ملفي الشخصي
@@ -94,40 +95,55 @@
                 </header>
 
                 <main class="content-body">
-                    <!-- تبويب المشتركين -->
+                    <!-- تبويب 1: المشتركين -->
                     <section id="tab-main" class="tab-content active">
                         <h3><i class="fa-solid fa-users"></i> الحضور في الغرفة</h3>
                         <div class="users-grid" id="users-grid"></div>
                     </section>
 
-                    <!-- تبويب السبورة -->
-                    <section id="tab-whiteboard" class="tab-content">
-                        <div class="whiteboard-toolbar" id="whiteboard-toolbar">
-                            <button class="tool-btn active" id="tool-pen" onclick="setTool('pen')"><i class="fa-solid fa-pen"></i> قلم</button>
-                            <button class="tool-btn" id="tool-eraser" onclick="setTool('eraser')"><i class="fa-solid fa-eraser"></i> استيكة</button>
-                            <input type="color" id="brush-color" value="#10b981" title="لون القلم">
-                            <input type="range" id="brush-size" min="2" max="40" value="5" title="حجم الخط">
-                            <select id="bg-selector" onchange="changeBoardBg(this.value)">
-                                <option value="bg-white">خلفية بيضاء</option>
-                                <option value="bg-dark">خلفية سوداء</option>
-                                <option value="bg-lines">سطور كشكول</option>
-                                <option value="bg-grid">مربعات شبكية</option>
-                            </select>
-                            
-                            <label class="btn btn-secondary host-only" style="cursor: pointer;">
-                                <i class="fa-solid fa-file-pdf"></i> رفع PDF
-                                <input type="file" id="pdf-input" accept="application/pdf" onchange="loadPDF(event)" hidden>
-                            </label>
+                    <!-- تبويب 2: السبورة التفاعلية الكاملة -->
+                    <section id="tab-whiteboard" class="tab-content full-content">
+                        <div class="floating-toolbar">
+                            <div class="tool-group">
+                                <button class="tool-btn active" id="tool-pen" onclick="setTool('pen')" title="قلم"><i class="fa-solid fa-pen"></i></button>
+                                <button class="tool-btn" id="tool-eraser" onclick="setTool('eraser')" title="استيكة"><i class="fa-solid fa-eraser"></i></button>
+                                <input type="color" id="brush-color" value="#10b981" title="لون الخط">
+                                <input type="range" id="brush-size" min="2" max="40" value="5" title="سمك الخط">
+                            </div>
 
-                            <button class="btn-danger host-only" onclick="clearBoard()"><i class="fa-solid fa-trash"></i> مسح الكل</button>
-                            <button class="btn-success" onclick="downloadBoard()"><i class="fa-solid fa-download"></i> تصدير صورة</button>
+                            <div class="tool-group">
+                                <select id="bg-selector" onchange="changeBoardBg(this.value)">
+                                    <option value="bg-white">⚪ بيضاء</option>
+                                    <option value="bg-dark">⚫ سوداء</option>
+                                    <option value="bg-lines">📖 سطور</option>
+                                    <option value="bg-grid">🏁 مربعات</option>
+                                </select>
+                                <label class="tool-btn-file host-only" title="رفع ملف PDF">
+                                    <i class="fa-solid fa-file-pdf"></i>
+                                    <input type="file" id="pdf-input" accept="application/pdf" onchange="loadPDF(event)" hidden>
+                                </label>
+                            </div>
+
+                            <!-- إدارة صفحات السبورة -->
+                            <div class="tool-group page-controls">
+                                <button class="btn-sm-tool" onclick="prevBoardPage()"><i class="fa-solid fa-chevron-right"></i></button>
+                                <span id="page-num-display">1 / 1</span>
+                                <button class="btn-sm-tool" onclick="nextBoardPage()"><i class="fa-solid fa-chevron-left"></i></button>
+                                <button class="btn-sm-tool host-only btn-add-page" onclick="addBoardPage()" title="إضافة صفحة جديدة"><i class="fa-solid fa-plus"></i></button>
+                            </div>
+
+                            <div class="tool-group">
+                                <button class="btn-sm-tool btn-danger-tool host-only" onclick="clearBoard()" title="مسح الصفحة الحالية"><i class="fa-solid fa-trash"></i></button>
+                                <button class="btn-sm-tool btn-success-tool" onclick="downloadBoard()" title="تحميل صورة"><i class="fa-solid fa-download"></i></button>
+                            </div>
                         </div>
-                        <div class="canvas-container bg-white" id="canvas-container">
+
+                        <div class="canvas-fullscreen-container bg-white" id="canvas-container">
                             <canvas id="whiteboard"></canvas>
                         </div>
                     </section>
 
-                    <!-- تبويب الكاميرات -->
+                    <!-- تبويب 3: الكاميرات -->
                     <section id="tab-cameras" class="tab-content">
                         <div class="cameras-grid" id="cameras-grid"></div>
                         <div class="floating-cam" id="floating-cam">
@@ -136,21 +152,21 @@
                         </div>
                     </section>
 
-                    <!-- تبويب مشاركة الشاشة -->
-                    <section id="tab-screen" class="tab-content">
-                        <div class="screen-controls mb-3">
+                    <!-- تبويب 4: مشاركة الشاشة بكامل المساحة -->
+                    <section id="tab-screen" class="tab-content full-content">
+                        <div class="screen-top-bar">
                             <button class="btn btn-primary host-only" onclick="startScreenShare()"><i class="fa-solid fa-desktop"></i> بدء مشاركة الشاشة</button>
                             <button class="btn btn-warning" id="presentation-btn" onclick="togglePresentation()"><i class="fa-solid fa-expand"></i> وضعية الشرح للجميع</button>
                             <button class="btn btn-secondary" id="laser-btn" onclick="toggleLaser()"><i class="fa-solid fa-wand-magic-sparkles"></i> مؤشر الليزر</button>
                             <button class="btn btn-danger host-only" id="record-btn" onclick="toggleRecording()"><i class="fa-solid fa-circle"></i> بدء تسجيل المحاضرة</button>
                         </div>
-                        <div class="screen-viewer-wrapper" id="screen-wrapper">
+                        <div class="screen-fullscreen-wrapper" id="screen-wrapper">
                             <video id="shared-screen-video" autoplay playsinline></video>
                             <div id="laser-pointer" class="laser-pointer"></div>
                         </div>
                     </section>
 
-                    <!-- تبويب الشات المخصص -->
+                    <!-- تبويب 5: الشات مع مرفقات الصور والملفات -->
                     <section id="tab-chat" class="tab-content">
                         <div class="modern-chat-card">
                             <div class="chat-header-bar">
@@ -160,13 +176,17 @@
                                 <!-- الرسائل بتنزل هنا -->
                             </div>
                             <div class="chat-input-bar">
+                                <label class="chat-attach-btn" title="إرفاق صورة أو ملف">
+                                    <i class="fa-solid fa-paperclip"></i>
+                                    <input type="file" id="chat-file-input" onchange="sendChatFile(event)" hidden>
+                                </label>
                                 <input type="text" id="chat-input" placeholder="اكتب رسالتك هنا..." onkeypress="handleChatKey(event)">
                                 <button class="btn btn-primary" onclick="sendChatMessage()"><i class="fa-solid fa-paper-plane"></i> إرسال</button>
                             </div>
                         </div>
                     </section>
 
-                    <!-- تبويب الملف الشخصي -->
+                    <!-- تبويب 6: البروفايل -->
                     <section id="tab-profile" class="tab-content">
                         <div class="profile-card">
                             <div class="profile-avatar-wrapper">
