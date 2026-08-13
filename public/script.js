@@ -28,31 +28,34 @@ if (userPicInput) {
         const file = e.target.files[0];
         if (file) {
             const reader = new FileReader();
-            reader.onload = function(evt) { userPic = evt.target.result; };
+            reader.onload = function(evt) { 
+                userPic = evt.target.result;
+                const profileImg = document.getElementById('profile-preview-img');
+                if (profileImg) profileImg.src = userPic;
+            };
             reader.readAsDataURL(file);
         }
     });
 }
 
-// 1️⃣ إنشاء غرفة جديدة (Host) - مضمونة ومباشرة
+// 1️⃣ إنشاء غرفة جديدة (Host)
 function createRoom() {
     const userInput = document.getElementById('username-input');
     userName = (userInput && userInput.value.trim()) ? userInput.value.trim() : 'المحاضر';
     
-    // توليد كود الغرفة محلياً كخطة بديلة فورية
     const generatedId = Math.random().toString(36).substring(2, 8);
     currentRoomId = generatedId;
     isHost = true;
 
-    // محاولة الاتصال بالسيرفر
     socket.emit('create-room', { userName, userPic, roomId: generatedId }, (res) => {
         if (res && res.roomId) {
             currentRoomId = res.roomId;
         }
     });
 
-    // الانتقال الفوري لشاشة الرابط دون انتظار الشبكة
     applyHostPermissions();
+    updateProfileUI();
+
     const linkInput = document.getElementById('created-room-link');
     if (linkInput) {
         linkInput.value = `${window.location.origin}?room=${currentRoomId}`;
@@ -76,9 +79,10 @@ function joinRoom() {
         if (res && res.success) {
             isHost = res.isHost || false;
             applyHostPermissions();
+            updateProfileUI();
             enterRoom();
         } else {
-            // انضمام مباشر لو السيرفر أرسل موافقة أو تعذر
+            updateProfileUI();
             enterRoom();
         }
     });
@@ -88,6 +92,25 @@ function applyHostPermissions() {
     document.querySelectorAll('.host-only').forEach(el => {
         el.style.display = isHost ? '' : 'none';
     });
+}
+
+function updateProfileUI() {
+    const nameDisplay = document.getElementById('profile-name-display');
+    const roleDisplay = document.getElementById('profile-role-display');
+    const profileImg = document.getElementById('profile-preview-img');
+
+    if (nameDisplay) nameDisplay.textContent = userName;
+    if (roleDisplay) roleDisplay.textContent = isHost ? 'منظم الغرفة (Host) 👑' : 'عضو (Viewer)';
+    if (profileImg) profileImg.src = userPic;
+}
+
+function updateProfile() {
+    const editInput = document.getElementById('edit-profile-name');
+    if (editInput && editInput.value.trim()) {
+        userName = editInput.value.trim();
+        updateProfileUI();
+        alert('تم تحديث اسمك بنجاح! 🎉');
+    }
 }
 
 function copyRoomLink() {
@@ -125,12 +148,12 @@ function leaveRoom() {
     }
 }
 
-// التنقل بين التبويبات
+// التنقل بين التبويبات للـ Sidebar الجديد
 function switchTab(tab) {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
-    const btn = document.querySelector(`[data-tab="${tab}"]`);
+    const btn = document.querySelector(`.nav-item[data-tab="${tab}"]`);
     const content = document.getElementById(`tab-${tab}`);
 
     if (btn) btn.classList.add('active');
@@ -245,12 +268,12 @@ socket.on('change-bg', (bgClass) => {
 function downloadBoard() {
     if (!canvas) return;
     const link = document.createElement('a');
-    link.download = 'Barham-Whiteboard.png';
+    link.download = 'Al-Boulaqi-Whiteboard.png';
     link.href = canvas.toDataURL();
     link.click();
 }
 
-// ------------ رفع واستعراض PDF ------------
+// ------------ رفع ملف PDF ------------
 function loadPDF(event) {
     const file = event.target.files[0];
     if (!file || file.type !== 'application/pdf') return alert('اختر ملف PDF صحيح');
@@ -296,8 +319,8 @@ socket.on('receive-chat', (data) => {
     const box = document.getElementById('chat-messages');
     if (!box) return;
     const msgDiv = document.createElement('div');
-    msgDiv.style.marginBottom = "8px";
-    msgDiv.innerHTML = `<strong>${data.sender}</strong> <small style="opacity:0.7">(${data.time})</small>: <p style="margin:2px 0 0 0">${data.message}</p>`;
+    msgDiv.className = 'chat-bubble-item';
+    msgDiv.innerHTML = `<strong>${data.sender}</strong> <small style="opacity:0.6; font-size:0.8rem">(${data.time})</small>: <p style="margin:4px 0 0 0">${data.message}</p>`;
     box.appendChild(msgDiv);
     box.scrollTop = box.scrollHeight;
 });
@@ -432,7 +455,7 @@ function saveRecording() {
     const a = document.createElement('a');
     a.style.display = 'none';
     a.href = url;
-    a.download = `محاضرة-Barham-Meet.webm`;
+    a.download = `محاضرة-Al-Boulaqi-Meet.webm`;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => {
