@@ -12,6 +12,7 @@ let unreadChatCount = 0;
 let activeTab = 'main';
 let boardPages = [[]];
 let currentPageIndex = 0;
+let currentUsersList = []; // حفظ القائمة محلياً لتحديثها عند دخول الغرفة
 
 const canvas = document.getElementById('whiteboard');
 const ctx = canvas ? canvas.getContext('2d') : null;
@@ -20,7 +21,7 @@ let currentTool = 'pen';
 let currentColor = '#10b981';
 let currentSize = 5;
 
-// تحميل الحساب
+// تحميل الحساب وقراءة الرابط تلقائياً
 window.addEventListener('DOMContentLoaded', () => {
     const savedName = localStorage.getItem('alboulaqi_user_name');
     const savedPic = localStorage.getItem('alboulaqi_user_pic');
@@ -159,6 +160,7 @@ function enterRoom() {
     if (roomDisplay) roomDisplay.textContent = currentRoomId;
     
     showScreen('room-screen');
+    renderUsersGrid(currentUsersList); // إعادة رسم القائمة فور الدخول
     setTimeout(resizeCanvas, 100);
     startLocalCamera();
 }
@@ -177,7 +179,7 @@ function leaveRoom() {
     }
 }
 
-// 3️⃣ التنقل ومزامنة التبويبات والأعضاء
+// 3️⃣ التنقل وإدارة قائمة الحضور
 function switchTab(tab) {
     activeTab = tab;
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
@@ -204,8 +206,7 @@ function switchTab(tab) {
 
 socket.on('sync-tab', (tab) => switchTab(tab));
 
-// تحديث قائمة الحضور لكل الناس
-socket.on('update-users', (users) => {
+function renderUsersGrid(users) {
     const grid = document.getElementById('users-grid');
     if (!grid || !Array.isArray(users)) return;
     grid.innerHTML = users.map(u => `
@@ -214,10 +215,19 @@ socket.on('update-users', (users) => {
             <h4>${u.name} ${u.isHost ? '👑 (Host)' : ''}</h4>
         </div>
     `).join('');
+}
+
+// التحديث اللحظي للقائمة لجميع الأطراف
+socket.on('update-users', (users) => {
+    currentUsersList = users;
+    renderUsersGrid(users);
 });
 
-// مزامنة حالة الشات والتبويب عند الانضمام
-socket.on('sync-initial-state', ({ messages, currentTab }) => {
+socket.on('sync-initial-state', ({ messages, currentTab, users }) => {
+    if (users) {
+        currentUsersList = users;
+        renderUsersGrid(users);
+    }
     if (messages && Array.isArray(messages)) {
         const box = document.getElementById('chat-messages');
         if (box) box.innerHTML = '';
@@ -412,7 +422,7 @@ function loadPDF(event) {
     reader.readAsArrayBuffer(file);
 }
 
-// 5️⃣ الشات المباشر
+// 5️⃣ الشات المباشر المحدث لعرض الرسائل عند الراسل والمستقبل
 function sendChatMessage() {
     const input = document.getElementById('chat-input');
     if (!input) return;
@@ -458,6 +468,7 @@ function appendMessageToDOM(data) {
     const box = document.getElementById('chat-messages');
     if (!box) return;
 
+    // إضافة شارة الإشعار فقط لو الرسالة من شخص آخر وأنت مش فاتح تبويب الشات
     if (activeTab !== 'chat' && data.sender !== userName) {
         unreadChatCount++;
         const badge = document.getElementById('chat-badge');
@@ -484,6 +495,7 @@ function appendMessageToDOM(data) {
     box.scrollTop = box.scrollHeight;
 }
 
+// استقبال أي رسالة وعرضها فوراً للجميع
 socket.on('receive-chat', (data) => {
     appendMessageToDOM(data);
 });

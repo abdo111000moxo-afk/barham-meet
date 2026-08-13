@@ -15,12 +15,11 @@ const io = new Server(server, {
 
 app.use(express.static('public'));
 
-// تخزين بيانات الغرف (الأعضاء + الشات + التبويب الحالي)
 const rooms = {};
 
 io.on('connection', (socket) => {
 
-    // 1️⃣ إنشاء غرفة جديدة
+    // 1️⃣ إنشاء غرفة
     socket.on('create-room', ({ userName, userPic, roomId }, callback) => {
         socket.join(roomId);
         socket.roomId = roomId;
@@ -34,11 +33,11 @@ io.on('connection', (socket) => {
 
         if (callback) callback({ success: true, roomId });
         
-        // إرسال التحديث لجميع الأعضاء
+        // إرسال التحديث لجميع من في الغرفة
         io.to(roomId).emit('update-users', rooms[roomId].users);
     });
 
-    // 2️⃣ انضمام لغرفة موجودة
+    // 2️⃣ انضمام لغرفة
     socket.on('join-room', ({ roomId, userName, userPic }, callback) => {
         socket.join(roomId);
         socket.roomId = roomId;
@@ -52,7 +51,6 @@ io.on('connection', (socket) => {
             };
         }
 
-        // إضافة العضو إذا لم يكن موجوداً
         const existingUser = rooms[roomId].users.find(u => u.id === socket.id);
         if (!existingUser) {
             rooms[roomId].users.push({ id: socket.id, name: userName, pic: userPic, isHost: false });
@@ -60,17 +58,18 @@ io.on('connection', (socket) => {
 
         if (callback) callback({ success: true, isHost: false });
 
-        // إرسال التحديث لجميع الأعضاء
+        // إرسال التحديث لجميع الحضور (المنظم والمشاركين)
         io.to(roomId).emit('update-users', rooms[roomId].users);
 
-        // مزامنة الشات والتبويب الحالي للعضو الجديد المُنضم فوراً
+        // مزامنة حالة الشات والتبويب للعضو الجديد
         socket.emit('sync-initial-state', {
             messages: rooms[roomId].messages,
-            currentTab: rooms[roomId].currentTab
+            currentTab: rooms[roomId].currentTab,
+            users: rooms[roomId].users
         });
     });
 
-    // 3️⃣ إرسال الشات وبثه لجميع الموجودين في الغرفة
+    // 3️⃣ الشات المباشر (إرسال للجميع بما فيهم الراسل لضمان الظهور الموحد)
     socket.on('send-chat', (data) => {
         if (rooms[data.roomId]) {
             rooms[data.roomId].messages.push(data);
@@ -78,15 +77,12 @@ io.on('connection', (socket) => {
         io.to(data.roomId).emit('receive-chat', data);
     });
 
-    // 4️⃣ تغيير التبويب وبثه
+    // 4️⃣ مزامنة باقي الخصائص
     socket.on('change-tab', ({ roomId, tab }) => {
-        if (rooms[roomId]) {
-            rooms[roomId].currentTab = tab;
-        }
+        if (rooms[roomId]) rooms[roomId].currentTab = tab;
         socket.to(roomId).emit('sync-tab', tab);
     });
 
-    // 5️⃣ رسم السبورة
     socket.on('draw-board', ({ roomId, drawData }) => {
         socket.to(roomId).emit('draw-board', drawData);
     });
@@ -115,7 +111,6 @@ io.on('connection', (socket) => {
         socket.to(roomId).emit('presentation-mode', active);
     });
 
-    // 🚪 عند خروج أي مستخدم
     socket.on('leave-room', ({ roomId }) => {
         handleDisconnect(socket, roomId);
     });
