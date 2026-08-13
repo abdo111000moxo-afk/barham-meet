@@ -13,6 +13,11 @@ let boardPages = [[]];
 let currentPageIndex = 0;
 let currentUsersList = [];
 
+// متغيرا تسجيل المحاضرة
+let mediaRecorder;
+let recordedChunks = [];
+let isRecording = false;
+
 const canvas = document.getElementById('whiteboard');
 const ctx = canvas ? canvas.getContext('2d') : null;
 let drawing = false;
@@ -27,6 +32,7 @@ const rtcConfig = {
     ]
 };
 
+// 1️⃣ بداية التشغيل وإظهار الشاشات
 window.addEventListener('DOMContentLoaded', () => {
     const savedName = localStorage.getItem('alboulaqi_user_name');
     const savedPic = localStorage.getItem('alboulaqi_user_pic');
@@ -170,7 +176,6 @@ async function enterRoom() {
     renderUsersGrid(currentUsersList);
     setTimeout(resizeCanvas, 100);
     
-    // تشغيل الكاميرا محلياً أولاً
     await startLocalCamera();
 }
 
@@ -208,7 +213,7 @@ function switchTab(tab) {
 
 socket.on('sync-tab', (tab) => switchTab(tab));
 
-// 👥 الحضور والشبكة
+// 👥 رسم قائمة الحضور
 function renderUsersGrid(users) {
     const grid = document.getElementById('users-grid');
     if (!grid || !Array.isArray(users)) return;
@@ -254,7 +259,6 @@ socket.on('update-users', (users) => {
 });
 
 socket.on('user-joined-webrtc', ({ userId }) => {
-    // لما عضو جديد يدخل ونكون احنا جهزنا الكاميرا، نعمل معاه اتصال جديد
     if (!peerConnections[userId]) {
         createPeerConnection(userId, true);
     }
@@ -273,7 +277,7 @@ socket.on('sync-initial-state', ({ messages, currentTab, users }) => {
     if (currentTab) switchTab(currentTab);
 });
 
-// 📹📹 WebRTC (تشغيل كاميرات الحضور)
+// 📹📹 الصوت والكاميرا عبر WebRTC
 async function startLocalCamera() {
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -453,6 +457,66 @@ function makeElementDraggable(elmnt) {
         document.ontouchend = null;
         document.ontouchmove = null;
     }
+}
+
+// 🎬 🎥 تسجيل المحاضرة (تمت الاستعادة بنجاح!)
+async function toggleRecording() {
+    const recordBtn = document.getElementById('record-btn');
+
+    if (!isRecording) {
+        try {
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+                video: { mediaSource: "screen" },
+                audio: true
+            });
+
+            recordedChunks = [];
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) recordedChunks.push(e.data);
+            };
+
+            mediaRecorder.onstop = saveRecording;
+            mediaRecorder.start();
+            isRecording = true;
+
+            if (recordBtn) {
+                recordBtn.innerHTML = '<i class="fa-solid fa-square"></i> إيقاف وحفظ التسجيل';
+                recordBtn.style.backgroundColor = '#dc2626';
+            }
+
+            stream.getVideoTracks()[0].onended = () => {
+                if (isRecording) toggleRecording();
+            };
+
+        } catch (err) {
+            alert('لم يتم السماح بتسجيل الشاشة.');
+        }
+    } else {
+        mediaRecorder.stop();
+        isRecording = false;
+
+        if (recordBtn) {
+            recordBtn.innerHTML = '<i class="fa-solid fa-circle"></i> بدء تسجيل المحاضرة';
+            recordBtn.style.backgroundColor = '';
+        }
+    }
+}
+
+function saveRecording() {
+    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = `محاضرة-Al-Boulaqi-Meet.webm`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }, 100);
 }
 
 // 💬 الشات المباشر
