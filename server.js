@@ -51,7 +51,11 @@ io.on('connection', (socket) => {
 
         if (callback) callback({ success: true, isHost: false });
 
+        // إرسال التحديث لجميع الحضور
         io.to(roomId).emit('update-users', rooms[roomId].users);
+
+        // تنبيه الباقين بوجود عضو جديد لبدء اتصال الفيديو فوراً
+        socket.to(roomId).emit('user-joined-webrtc', { userId: socket.id, userName, userPic });
 
         socket.emit('sync-initial-state', {
             messages: rooms[roomId].messages,
@@ -60,7 +64,7 @@ io.on('connection', (socket) => {
         });
     });
 
-    // 📹 3️⃣ إشارات اتصال الفيديو WebRTC (Signaling)
+    // 📹 3️⃣ إشارات اتصال الفيديو WebRTC
     socket.on('webrtc-offer', ({ targetId, offer }) => {
         io.to(targetId).emit('webrtc-offer', { senderId: socket.id, offer });
     });
@@ -73,7 +77,7 @@ io.on('connection', (socket) => {
         io.to(targetId).emit('webrtc-ice-candidate', { senderId: socket.id, candidate });
     });
 
-    // 4️⃣ الشات والتحكم بالصوت والسبورة
+    // 4️⃣ باقي الميزات
     socket.on('send-chat', (data) => {
         if (data && data.roomId) {
             socket.join(data.roomId);

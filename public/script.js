@@ -21,7 +21,10 @@ let currentColor = '#10b981';
 let currentSize = 5;
 
 const rtcConfig = {
-    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+    ]
 };
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -167,7 +170,7 @@ async function enterRoom() {
     renderUsersGrid(currentUsersList);
     setTimeout(resizeCanvas, 100);
     
-    // تشغيل الكاميرا محلياً وبدء ربط الفيديوهات مع الحاضرين
+    // تشغيل الكاميرا محلياً أولاً
     await startLocalCamera();
 }
 
@@ -248,12 +251,13 @@ socket.on('force-media-control', ({ type, state }) => {
 socket.on('update-users', (users) => {
     currentUsersList = users;
     renderUsersGrid(users);
+});
 
-    users.forEach(u => {
-        if (u.id !== socket.id && !peerConnections[u.id]) {
-            createPeerConnection(u.id, true);
-        }
-    });
+socket.on('user-joined-webrtc', ({ userId }) => {
+    // لما عضو جديد يدخل ونكون احنا جهزنا الكاميرا، نعمل معاه اتصال جديد
+    if (!peerConnections[userId]) {
+        createPeerConnection(userId, true);
+    }
 });
 
 socket.on('sync-initial-state', ({ messages, currentTab, users }) => {
@@ -269,12 +273,11 @@ socket.on('sync-initial-state', ({ messages, currentTab, users }) => {
     if (currentTab) switchTab(currentTab);
 });
 
-// 📹📹 تشغيل الميديا المحلية وربط أجهزة الحاضرين بها
+// 📹📹 WebRTC (تشغيل كاميرات الحضور)
 async function startLocalCamera() {
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         
-        // عرض الفيديو المترابط بالـ Pip والـ Grid
         const pipVideo = document.getElementById('my-pip-video');
         if (pipVideo) {
             pipVideo.srcObject = localStream;
@@ -283,7 +286,7 @@ async function startLocalCamera() {
         
         addVideoStream('local-user', localStream, userName + ' (أنت)');
     } catch (e) {
-        alert('يرجى إعطاء الإذن للمتصفح للوصول إلى الكاميرا والمايك');
+        console.log('الكاميرا غير متاحة:', e);
     }
 }
 
@@ -438,8 +441,8 @@ function makeElementDraggable(elmnt) {
 
     function touchDrag(e) {
         const touch = e.touches[0];
-        pos1 = pos3 - touch.clientX;
-        pos2 = pos4 - touch.clientY;
+        pos1 = touch.clientX;
+        pos2 = touch.clientY;
         elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
         elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
         elmnt.style.bottom = 'auto';
