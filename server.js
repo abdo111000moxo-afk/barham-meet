@@ -1,129 +1,80 @@
 ﻿const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+
 const app = express();
-const http = require('http').createServer(app);
-const io = require('socket.io')(http);
-const path = require('path');
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: { origin: "*" }
+});
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static('public'));
 
-// تخزين بيانات الغرف
 const rooms = {};
 
 io.on('connection', (socket) => {
-    console.log('⚡ متصل جديد:', socket.id);
 
-    // 1. إنشاء غرفة (Host)
-    socket.on('create-room', ({ userName, userPic }, callback) => {
-        const roomId = Math.random().toString(36).substring(2, 8);
-        
-        rooms[roomId] = {
-            host: socket.id,
-            users: {},
-            currentTab: 'main'
-        };
-
-        rooms[roomId].users[socket.id] = { id: socket.id, name: userName, pic: userPic, isHost: true };
-        
+    // إنشاء غرفة
+    socket.on('create-room', ({ userName, userPic, roomId }, callback) => {
         socket.join(roomId);
         socket.roomId = roomId;
+        socket.userName = userName;
+        
+        if (!rooms[roomId]) rooms[roomId] = [];
+        rooms[roomId].push({ id: socket.id, name: userName, pic: userPic, isHost: true });
 
-        // رد للعميل بتأكيد النجاح مع كود الغرفة
-        callback({ success: true, roomId });
-
-        // إرسال قائمة المشتركين للـ Host فوراً
-        io.to(roomId).emit('update-users', Object.values(rooms[roomId].users));
+        if (callback) callback({ success: true, roomId });
+        io.to(roomId).emit('update-users', rooms[roomId]);
     });
 
-    // 2. الانضمام لغرفة (Viewer)
+    // انضمام لغرفة
     socket.on('join-room', ({ roomId, userName, userPic }, callback) => {
-        if (!rooms[roomId]) {
-            return callback({ success: false, message: 'الغرفة غير موجودة أو الكود خاطئ!' });
-        }
-
-        rooms[roomId].users[socket.id] = { id: socket.id, name: userName, pic: userPic, isHost: false };
         socket.join(roomId);
         socket.roomId = roomId;
+        socket.userName = userName;
 
-        // إبلاغ الجميع بالقائمة المحدثة
-        io.to(roomId).emit('update-users', Object.values(rooms[roomId].users));
+        if (!rooms[roomId]) rooms[roomId] = [];
+        rooms[roomId].push({ id: socket.id, name: userName, pic: userPic, isHost: false });
 
-        // مزامنة التبويب الحالي مع العضو الجديد
-        socket.emit('sync-tab', rooms[roomId].currentTab);
-
-        callback({ success: true, roomId, isHost: false });
+        if (callback) callback({ success: true, isHost: false });
+        io.to(roomId).emit('update-users', rooms[roomId]);
     });
 
-    // مزامنة تنقل التبويبات (للآدمن فقط)
-    socket.on('change-tab', ({ roomId, tab }) => {
-        if (rooms[roomId] && rooms[roomId].host === socket.id) {
-            rooms[roomId].currentTab = tab;
-            socket.to(roomId).emit('sync-tab', tab);
-        }
-    });
-
-    // رسم السبورة اللحظي
-    socket.on('draw-board', ({ roomId, drawData }) => {
-        socket.to(roomId).emit('draw-board', drawData);
-    });
-
-    // مزامنة خلفية وحذف السبورة
-    socket.on('clear-board', (roomId) => {
-        socket.to(roomId).emit('clear-board');
-    });
-
-    socket.on('change-bg', ({ roomId, bgClass }) => {
-        socket.to(roomId).emit('change-bg', bgClass);
-    });
-
-    // الشات المباشر
+    // الشات المباشر (إرسال لكل المتصلين بالغرفة)
     socket.on('send-chat', (data) => {
         io.to(data.roomId).emit('receive-chat', data);
     });
 
-    // طلب الكلمة / رفع اليد
-    socket.on('raise-hand', ({ roomId, userName }) => {
-        io.to(roomId).emit('notify-hand', userName);
+    // مزامنة التبويبات (لما المحاضر يغير التبويب)
+    socket.on('change-tab', ({ roomId, tab }) => {
+        socket.to(roomId).emit('sync-tab', tab);
     });
 
-    // مؤشر الليزر اللحظي
-    socket.on('laser-move', ({ roomId, x, y, visible }) => {
-        socket.to(roomId).emit('laser-move', { x, y, visible });
+    // رسم السبورة
+    socket.on('draw-board', ({ roomId, drawData }) => {
+        socket.to(roomId).emit('draw-board', drawData);
     });
 
-    // وضع الشرح تلقائي للجميع
-    socket.on('presentation-mode', ({ roomId, active }) => {
-        socket.to(roomId).emit('presentation-mode', active);
+    // تغيير صفحة السبورة
+    socket.on('change-page', ({ roomId, pageIndex, totalPages }) => {
+        socket.to(roomId).emit('change-page', { pageIndex, totalPages });
     });
 
-    // الخروج الصريح من الغرفة
-    socket.on('leave-room', ({ roomId }) => {
-        removeUserFromRoom(socket, roomId);
+    // مسح السبورة
+    socket.on('clear-board', ({ roomId }) => {
+        socket.to(roomId).emit('clear-board');
     });
 
-    // قطع الاتصال تلقائياً
+    // عند الخروج
     socket.on('disconnect', () => {
-        if (socket.roomId) {
-            removeUserFromRoom(socket, socket.roomId);
+        if (socket.roomId && rooms[socket.roomId]) {
+            rooms[socket.roomId] = rooms[socket.roomId].filter(u => u.id !== socket.id);
+            io.to(socket.roomId).emit('update-users', rooms[socket.roomId]);
         }
     });
 });
 
-// دالة تنظيف ومسح المستخدم عند الخروج
-function removeUserFromRoom(socket, roomId) {
-    if (rooms[roomId] && rooms[roomId].users[socket.id]) {
-        delete rooms[roomId].users[socket.id];
-        
-        // تحديث القائمة للباقيين
-        io.to(roomId).emit('update-users', Object.values(rooms[roomId].users));
-
-        // لو الغرفة فضيت تماماً نمسحها من الذاكرة
-        if (Object.keys(rooms[roomId].users).length === 0) {
-            delete rooms[roomId];
-        }
-    }
-}
-
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => {
-    console.log(`🚀 السيرفر يعمل بنجاح على البورت: ${PORT}`);
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
