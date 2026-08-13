@@ -19,7 +19,7 @@ let currentTool = 'pen';
 let currentColor = '#10b981';
 let currentSize = 5;
 
-// 1️⃣ بداية التشغيل والتحكم بالشاشات بدون وميض
+// 1️⃣ بداية التشغيل والتحكم بالشاشات
 window.addEventListener('DOMContentLoaded', () => {
     const savedName = localStorage.getItem('alboulaqi_user_name');
     const savedPic = localStorage.getItem('alboulaqi_user_pic');
@@ -40,6 +40,10 @@ window.addEventListener('DOMContentLoaded', () => {
     } else {
         showScreen('login-screen');
     }
+
+    // تفعيل السحب والتنقل للكاميرا المنبثقة
+    const pipBox = document.getElementById('floating-cam-box');
+    if (pipBox) makeElementDraggable(pipBox);
 });
 
 function showScreen(screenId) {
@@ -73,6 +77,50 @@ function updateHomeUI() {
     const imgEl = document.getElementById('home-user-img');
     if (nameEl) nameEl.textContent = userName;
     if (imgEl) imgEl.src = userPic;
+}
+
+// ⚙️ الإعدادات المنبثقة
+function openSettingsModal() {
+    const nameInput = document.getElementById('modal-username-input');
+    const imgPreview = document.getElementById('modal-preview-img');
+    const modal = document.getElementById('settings-modal');
+
+    if (nameInput) nameInput.value = userName;
+    if (imgPreview) imgPreview.src = userPic;
+    if (modal) modal.classList.remove('hidden');
+}
+
+function closeSettingsModal() {
+    const modal = document.getElementById('settings-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+const modalPicInput = document.getElementById('modal-userpic-input');
+if (modalPicInput) {
+    modalPicInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                userPic = evt.target.result;
+                const imgPreview = document.getElementById('modal-preview-img');
+                if (imgPreview) imgPreview.src = userPic;
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+}
+
+function saveSettingsChanges() {
+    const nameInput = document.getElementById('modal-username-input');
+    if (nameInput && nameInput.value.trim()) {
+        userName = nameInput.value.trim();
+        localStorage.setItem('alboulaqi_user_name', userName);
+        localStorage.setItem('alboulaqi_user_pic', userPic);
+        updateHomeUI();
+        closeSettingsModal();
+        alert('تم حفظ البيانات بنجاح! 🎉');
+    }
 }
 
 function createRoom() {
@@ -169,7 +217,7 @@ function switchTab(tab) {
 
 socket.on('sync-tab', (tab) => switchTab(tab));
 
-// 👥 رسم الحضور مع خيارات التحكم للمنشئ
+// 👥 رسم الحضور والتحكم
 function renderUsersGrid(users) {
     const grid = document.getElementById('users-grid');
     if (!grid || !Array.isArray(users)) return;
@@ -227,7 +275,101 @@ socket.on('sync-initial-state', ({ messages, currentTab, users }) => {
     if (currentTab) switchTab(currentTab);
 });
 
-// 💬 الشات المباشر الموثق
+// 📹 التحكم بالكاميرا المحلية والصوت والكاميرا المنبثقة
+function startLocalCamera() {
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then(stream => {
+            localStream = stream;
+            const video = document.getElementById('my-pip-video');
+            if (video) video.srcObject = stream;
+        }).catch(() => console.log('الكاميرا غير متاحة'));
+}
+
+function toggleLocalAudio() {
+    if (!localStream) return;
+    const track = localStream.getAudioTracks()[0];
+    if (track) {
+        track.enabled = !track.enabled;
+        const btn = document.getElementById('toggle-mic-btn');
+        if (btn) btn.innerHTML = track.enabled ? '<i class="fa-solid fa-microphone"></i> الميكروفون: مفعل' : '<i class="fa-solid fa-microphone-slash"></i> الميكروفون: مكتوم';
+    }
+}
+
+function toggleLocalVideo() {
+    if (!localStream) return;
+    const track = localStream.getVideoTracks()[0];
+    if (track) {
+        track.enabled = !track.enabled;
+        const btn = document.getElementById('toggle-cam-btn');
+        if (btn) btn.innerHTML = track.enabled ? '<i class="fa-solid fa-video"></i> الكاميرا: مفعله' : '<i class="fa-solid fa-video-slash"></i> الكاميرا: معطلة';
+    }
+}
+
+function toggleFloatingCam() {
+    const box = document.getElementById('floating-cam-box');
+    if (box) box.classList.toggle('hidden');
+}
+
+// 🖐️ دالة السحب والإفراط للكاميرا المنبثقة
+function makeElementDraggable(elmnt) {
+    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+    const handle = document.getElementById('floating-cam-handle') || elmnt;
+
+    handle.onmousedown = dragMouseDown;
+    handle.ontouchstart = dragTouchStart;
+
+    function dragMouseDown(e) {
+        e.preventDefault();
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        document.onmouseup = closeDragElement;
+        document.onmousemove = elementDrag;
+    }
+
+    function elementDrag(e) {
+        e.preventDefault();
+        pos1 = pos3 - e.clientX;
+        pos2 = pos4 - e.clientY;
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
+        elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
+        elmnt.style.bottom = 'auto';
+        elmnt.style.right = 'auto';
+    }
+
+    function closeDragElement() {
+        document.onmouseup = null;
+        document.onmousemove = null;
+    }
+
+    function dragTouchStart(e) {
+        const touch = e.touches[0];
+        pos3 = touch.clientX;
+        pos4 = touch.clientY;
+        document.ontouchend = closeTouchDrag;
+        document.ontouchmove = touchDrag;
+    }
+
+    function touchDrag(e) {
+        const touch = e.touches[0];
+        pos1 = pos3 - touch.clientX;
+        pos2 = pos4 - touch.clientY;
+        pos3 = touch.clientX;
+        pos4 = touch.clientY;
+        elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
+        elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
+        elmnt.style.bottom = 'auto';
+        elmnt.style.right = 'auto';
+    }
+
+    function closeTouchDrag() {
+        document.ontouchend = null;
+        document.ontouchmove = null;
+    }
+}
+
+// 💬 الشات المباشر
 function sendChatMessage() {
     const input = document.getElementById('chat-input');
     if (!input) return;
@@ -307,7 +449,7 @@ socket.on('receive-chat', (data) => {
     appendMessageToDOM(data);
 });
 
-// السبورة والكاميرا
+// السبورة والمشاركة
 function resizeCanvas() {
     if (!canvas || !canvas.parentElement) return;
     canvas.width = canvas.parentElement.clientWidth;
@@ -501,15 +643,6 @@ function raiseHand() {
 socket.on('notify-hand', (name) => {
     alert(`✋ ${name} يطلب الكلمة الآن!`);
 });
-
-function startLocalCamera() {
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        .then(stream => {
-            localStream = stream;
-            const video = document.getElementById('my-pip-video');
-            if (video) video.srcObject = stream;
-        }).catch(() => console.log('الكاميرا غير متاحة'));
-}
 
 function startScreenShare() {
     if (!isHost) return alert('مشاركة الشاشة للمحاضر فقط');

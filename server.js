@@ -58,10 +58,8 @@ io.on('connection', (socket) => {
 
         if (callback) callback({ success: true, isHost: false });
 
-        // إرسال التحديث لجميع من في الغرفة
         io.to(roomId).emit('update-users', rooms[roomId].users);
 
-        // إرسال حالة الغرفة السابقة للعضو الجديد
         socket.emit('sync-initial-state', {
             messages: rooms[roomId].messages,
             currentTab: rooms[roomId].currentTab,
@@ -80,7 +78,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 4️⃣ كتم الصوت أو قفل الكاميرا من المنشئ (Host Controls)
+    // 4️⃣ كتم الصوت أو قفل الكاميرا
     socket.on('toggle-user-media', ({ roomId, targetUserId, type, state }) => {
         io.to(targetUserId).emit('force-media-control', { type, state });
         if (rooms[roomId]) {
@@ -93,7 +91,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 5️⃣ مزامنة التبويبات والسبورة
+    // 5️⃣ باقي التزامن والفعاليات
     socket.on('change-tab', ({ roomId, tab }) => {
         if (rooms[roomId]) rooms[roomId].currentTab = tab;
         socket.to(roomId).emit('sync-tab', tab);

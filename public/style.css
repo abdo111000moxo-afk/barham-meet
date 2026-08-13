@@ -135,6 +135,7 @@ body {
     transition: all 0.2s;
 }
 
+.btn-sm { padding: 8px 12px; font-size: 0.85rem; }
 .btn-primary { background: #10b981; color: #0b0f19; }
 .btn-primary:hover { background: #059669; }
 .btn-secondary { background: #334155; color: #fff; }
@@ -325,6 +326,49 @@ body {
 .canvas-fullscreen-container.bg-white { background: #ffffff; }
 .canvas-fullscreen-container.bg-dark { background: #0f172a; }
 
+/* 🎥 الكاميرا المنبثقة العائمة السريعة */
+.floating-cam-wrapper {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 200px;
+    background: #1e293b;
+    border: 2px solid #10b981;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+    z-index: 999999;
+    touch-action: none;
+}
+
+.floating-cam-wrapper.hidden { display: none !important; }
+
+.floating-cam-header {
+    background: #0f172a;
+    color: #10b981;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: move;
+}
+
+.btn-close-pip {
+    background: transparent;
+    border: none;
+    color: #ef4444;
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+
+.floating-cam-wrapper video {
+    width: 100%;
+    height: 140px;
+    object-fit: cover;
+    display: block;
+}
+
 /* 🖥️ مشاركة الشاشة */
 .screen-top-bar {
     padding: 12px 20px;
@@ -407,7 +451,7 @@ body {
     font-size: 0.85rem;
 }
 
-/* 👤 الحضور والتحكم */
+/* 👤 البروفايل وكروت الحضور + أزرار كتم المنشئ */
 .profile-card { background: #1e293b; border-radius: 16px; padding: 40px; max-width: 480px; margin: 40px auto; text-align: center; }
 .profile-avatar-wrapper img { width: 110px; height: 110px; border-radius: 50%; border: 3px solid #10b981; margin-bottom: 16px; }
 
