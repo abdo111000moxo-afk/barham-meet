@@ -1,17 +1,17 @@
-﻿const socket = io();
+﻿const socket = io({ transports: ['websocket', 'polling'] });
+
 let currentRoomId = null;
 let isHost = false;
 let userName = "";
 let userPic = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
 let localStream = null;
 
-// الإشعارات والصفحات
 let unreadChatCount = 0;
 let activeTab = 'main';
-let boardPages = [[]]; // تخزين خطوط الرسم لكل صفحة
+let boardPages = [[]];
 let currentPageIndex = 0;
+let currentUsersList = [];
 
-// السبورة
 const canvas = document.getElementById('whiteboard');
 const ctx = canvas ? canvas.getContext('2d') : null;
 let drawing = false;
@@ -19,34 +19,49 @@ let currentTool = 'pen';
 let currentColor = '#10b981';
 let currentSize = 5;
 
-function resizeCanvas() {
-    if (!canvas || !canvas.parentElement) return;
-    canvas.width = canvas.parentElement.clientWidth;
-    canvas.height = canvas.parentElement.clientHeight;
-    redrawCurrentPage();
-}
-window.addEventListener('resize', resizeCanvas);
+// تحميل البيانات والروابط
+window.addEventListener('DOMContentLoaded', () => {
+    const savedName = localStorage.getItem('alboulaqi_user_name');
+    const savedPic = localStorage.getItem('alboulaqi_user_pic');
 
-const userPicInput = document.getElementById('userpic-input');
-if (userPicInput) {
-    userPicInput.addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(evt) { 
-                userPic = evt.target.result;
-                const profileImg = document.getElementById('profile-preview-img');
-                if (profileImg) profileImg.src = userPic;
-            };
-            reader.readAsDataURL(file);
+    if (savedName) {
+        userName = savedName;
+        if (savedPic) userPic = savedPic;
+        updateHomeUI();
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomIdFromUrl = urlParams.get('room');
+        if (roomIdFromUrl) {
+            const roomInput = document.getElementById('room-id-input');
+            if (roomInput) roomInput.value = roomIdFromUrl;
         }
-    });
+        showScreen('home-screen');
+    } else {
+        showScreen('login-screen');
+    }
+});
+
+function saveInitialProfile() {
+    const nameInput = document.getElementById('username-input');
+    const name = nameInput ? nameInput.value.trim() : '';
+
+    if (!name) return alert('يرجى كتابة اسمك أولاً');
+
+    userName = name;
+    localStorage.setItem('alboulaqi_user_name', userName);
+    localStorage.setItem('alboulaqi_user_pic', userPic);
+    updateHomeUI();
+    showScreen('home-screen');
+}
+
+function updateHomeUI() {
+    const nameEl = document.getElementById('home-user-name');
+    const imgEl = document.getElementById('home-user-img');
+    if (nameEl) nameEl.textContent = userName;
+    if (imgEl) imgEl.src = userPic;
 }
 
 function createRoom() {
-    const userInput = document.getElementById('username-input');
-    userName = (userInput && userInput.value.trim()) ? userInput.value.trim() : 'المحاضر';
-    
     const generatedId = Math.random().toString(36).substring(2, 8);
     currentRoomId = generatedId;
     isHost = true;
@@ -56,32 +71,26 @@ function createRoom() {
     });
 
     applyHostPermissions();
-    updateProfileUI();
-
     const linkInput = document.getElementById('created-room-link');
-    if (linkInput) linkInput.value = `${window.location.origin}?room=${currentRoomId}`;
+    if (linkInput) linkInput.value = `${window.location.origin}/?room=${currentRoomId}`;
     showScreen('share-screen');
 }
 
 function joinRoom() {
-    const userInput = document.getElementById('username-input');
     const roomInput = document.getElementById('room-id-input');
-    
-    userName = (userInput && userInput.value.trim()) ? userInput.value.trim() : 'حاضر';
-    const roomId = roomInput ? roomInput.value.trim() : '';
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomId = (roomInput && roomInput.value.trim()) ? roomInput.value.trim() : urlParams.get('room');
 
     if (!roomId) return alert('يرجى كتابة كود الغرفة أولاً');
 
     currentRoomId = roomId;
 
-    socket.emit('join-room', { roomId, userName, userPic }, (res) => {
+    socket.emit('join-room', { roomId: currentRoomId, userName, userPic }, (res) => {
         if (res && res.success) {
             isHost = res.isHost || false;
             applyHostPermissions();
-            updateProfileUI();
             enterRoom();
         } else {
-            updateProfileUI();
             enterRoom();
         }
     });
@@ -91,25 +100,6 @@ function applyHostPermissions() {
     document.querySelectorAll('.host-only').forEach(el => {
         el.style.display = isHost ? '' : 'none';
     });
-}
-
-function updateProfileUI() {
-    const nameDisplay = document.getElementById('profile-name-display');
-    const roleDisplay = document.getElementById('profile-role-display');
-    const profileImg = document.getElementById('profile-preview-img');
-
-    if (nameDisplay) nameDisplay.textContent = userName;
-    if (roleDisplay) roleDisplay.textContent = isHost ? 'منظم الغرفة (Host) 👑' : 'عضو (Viewer)';
-    if (profileImg) profileImg.src = userPic;
-}
-
-function updateProfile() {
-    const editInput = document.getElementById('edit-profile-name');
-    if (editInput && editInput.value.trim()) {
-        userName = editInput.value.trim();
-        updateProfileUI();
-        alert('تم تحديث اسمك بنجاح! 🎉');
-    }
 }
 
 function copyRoomLink() {
@@ -124,8 +114,9 @@ function copyRoomLink() {
 function enterRoom() {
     const roomDisplay = document.getElementById('current-room-id');
     if (roomDisplay) roomDisplay.textContent = currentRoomId;
-    
+
     showScreen('room-screen');
+    renderUsersGrid(currentUsersList);
     setTimeout(resizeCanvas, 100);
     startLocalCamera();
 }
@@ -140,11 +131,10 @@ function leaveRoom() {
     if (confirm('هل أنت تأكد من الخروج من الغرفة؟')) {
         if (localStream) localStream.getTracks().forEach(t => t.stop());
         socket.emit('leave-room', { roomId: currentRoomId });
-        location.reload();
+        window.location.href = window.location.origin;
     }
 }
 
-// التنقل بين التبويبات + مسح الإشعارات عند فتح الشات
 function switchTab(tab) {
     activeTab = tab;
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
@@ -159,10 +149,7 @@ function switchTab(tab) {
     if (tab === 'chat') {
         unreadChatCount = 0;
         const badge = document.getElementById('chat-badge');
-        if (badge) {
-            badge.textContent = '0';
-            badge.classList.add('hidden');
-        }
+        if (badge) badge.classList.add('hidden');
     }
 
     if (tab === 'whiteboard') setTimeout(resizeCanvas, 50);
@@ -174,18 +161,153 @@ function switchTab(tab) {
 
 socket.on('sync-tab', (tab) => switchTab(tab));
 
-socket.on('update-users', (users) => {
+// 👥 رسم الحضور مع خيارات التحكم للمنشئ
+function renderUsersGrid(users) {
     const grid = document.getElementById('users-grid');
     if (!grid || !Array.isArray(users)) return;
+
     grid.innerHTML = users.map(u => `
         <div class="user-card">
             <img src="${u.pic || userPic}">
-            <h4>${u.name} ${u.isHost ? '👑' : ''}</h4>
+            <h4>${u.name} ${u.isHost ? '👑 (Host)' : ''}</h4>
+            ${isHost && !u.isHost ? `
+                <div class="host-controls mt-2">
+                    <button class="btn-ctrl ${u.micMuted ? 'muted' : ''}" onclick="toggleUserMedia('${u.id}', 'audio', ${!u.micMuted})" title="كتم/فتح الصوت">
+                        <i class="fa-solid ${u.micMuted ? 'fa-microphone-slash' : 'fa-microphone'}"></i>
+                    </button>
+                    <button class="btn-ctrl ${u.camOff ? 'muted' : ''}" onclick="toggleUserMedia('${u.id}', 'video', ${!u.camOff})" title="إيقاف/تشغيل الكاميرا">
+                        <i class="fa-solid ${u.camOff ? 'fa-video-slash' : 'fa-video'}"></i>
+                    </button>
+                </div>
+            ` : ''}
         </div>
     `).join('');
+}
+
+function toggleUserMedia(userId, type, state) {
+    socket.emit('toggle-user-media', { roomId: currentRoomId, targetUserId: userId, type, state });
+}
+
+socket.on('force-media-control', ({ type, state }) => {
+    if (localStream) {
+        if (type === 'audio') {
+            localStream.getAudioTracks().forEach(t => t.enabled = !state);
+            alert(state ? 'قام المنظم بكتِم الصوت لك 🔇' : 'قام المنظم بفتح الميكروفون لك 🎙️');
+        }
+        if (type === 'video') {
+            localStream.getVideoTracks().forEach(t => t.enabled = !state);
+            alert(state ? 'قام المنظم بإيقاف الكاميرا الخاصة بك 📷' : 'قام المنظم بتشغيل كاميرتك 📹');
+        }
+    }
 });
 
-// ------------ السبورة وجمع الصفحات ------------
+socket.on('update-users', (users) => {
+    currentUsersList = users;
+    renderUsersGrid(users);
+});
+
+socket.on('sync-initial-state', ({ messages, currentTab, users }) => {
+    if (users) {
+        currentUsersList = users;
+        renderUsersGrid(users);
+    }
+    if (messages && Array.isArray(messages)) {
+        const box = document.getElementById('chat-messages');
+        if (box) box.innerHTML = '';
+        messages.forEach(msg => appendMessageToDOM(msg));
+    }
+    if (currentTab) switchTab(currentTab);
+});
+
+// 💬 الشات المباشر الموثق
+function sendChatMessage() {
+    const input = document.getElementById('chat-input');
+    if (!input) return;
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    const roomIdToSend = currentRoomId || new URLSearchParams(window.location.search).get('room');
+
+    socket.emit('send-chat', {
+        roomId: roomIdToSend,
+        sender: userName,
+        message: msg,
+        fileUrl: null,
+        fileType: null,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    });
+    input.value = '';
+}
+
+function sendChatFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const roomIdToSend = currentRoomId || new URLSearchParams(window.location.search).get('room');
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        const isImage = file.type.startsWith('image/');
+        socket.emit('send-chat', {
+            roomId: roomIdToSend,
+            sender: userName,
+            message: `مرفق: ${file.name}`,
+            fileUrl: evt.target.result,
+            fileType: isImage ? 'image' : 'file',
+            fileName: file.name,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+    };
+    reader.readAsDataURL(file);
+}
+
+function handleChatKey(e) {
+    if (e.key === 'Enter') sendChatMessage();
+}
+
+function appendMessageToDOM(data) {
+    const box = document.getElementById('chat-messages');
+    if (!box) return;
+
+    if (activeTab !== 'chat' && data.sender !== userName) {
+        unreadChatCount++;
+        const badge = document.getElementById('chat-badge');
+        if (badge) {
+            badge.textContent = unreadChatCount;
+            badge.classList.remove('hidden');
+        }
+    }
+
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'chat-bubble-item';
+
+    let fileHTML = '';
+    if (data.fileUrl) {
+        if (data.fileType === 'image') {
+            fileHTML = `<br><img src="${data.fileUrl}" style="max-width:100%; border-radius:8px; margin-top:8px;">`;
+        } else {
+            fileHTML = `<br><a href="${data.fileUrl}" download="${data.fileName || 'file'}" class="btn-chat-file"><i class="fa-solid fa-download"></i> تحميل ${data.fileName || 'الملف'}</a>`;
+        }
+    }
+
+    msgDiv.innerHTML = `<strong style="color:#10b981">${data.sender}</strong> <small style="opacity:0.6; font-size:0.75rem">(${data.time})</small>: <p style="margin:4px 0 0 0; color:#f1f5f9">${data.message}</p>${fileHTML}`;
+    box.appendChild(msgDiv);
+    box.scrollTop = box.scrollHeight;
+}
+
+socket.on('receive-chat', (data) => {
+    appendMessageToDOM(data);
+});
+
+// السبورة والكاميرا
+function resizeCanvas() {
+    if (!canvas || !canvas.parentElement) return;
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight;
+    redrawCurrentPage();
+}
+window.addEventListener('resize', resizeCanvas);
+
 if (canvas) {
     canvas.addEventListener('mousedown', () => drawing = true);
     canvas.addEventListener('mouseup', () => { drawing = false; if(ctx) ctx.beginPath(); });
@@ -235,7 +357,6 @@ function executeDraw(x, y) {
     ctx.beginPath();
     ctx.moveTo(x, y);
 
-    // حفظ الخط في الصفحة الحالية
     if (!boardPages[currentPageIndex]) boardPages[currentPageIndex] = [];
     boardPages[currentPageIndex].push({ x, y, color: lineStyle, size: currentSize });
 
@@ -257,12 +378,9 @@ socket.on('draw-board', ({ x, y, color, size, pageIndex }) => {
     ctx.moveTo(x, y);
 });
 
-// إدارة الصفحات
 function updatePageDisplay() {
     const pageDisplay = document.getElementById('page-num-display');
-    if (pageDisplay) {
-        pageDisplay.textContent = `${currentPageIndex + 1} / ${boardPages.length}`;
-    }
+    if (pageDisplay) pageDisplay.textContent = `${currentPageIndex + 1} / ${boardPages.length}`;
 }
 
 function addBoardPage() {
@@ -319,7 +437,7 @@ function redrawCurrentPage() {
 function clearBoard() {
     boardPages[currentPageIndex] = [];
     clearCanvasScreen();
-    socket.emit('clear-board', { roomId: currentRoomId, pageIndex: currentPageIndex });
+    socket.emit('clear-board', { roomId: currentRoomId });
 }
 
 socket.on('clear-board', () => {
@@ -367,80 +485,6 @@ function loadPDF(event) {
     reader.readAsArrayBuffer(file);
 }
 
-// ------------ الشات والملفات والإشعارات ------------
-function sendChatMessage() {
-    const input = document.getElementById('chat-input');
-    if (!input) return;
-    const msg = input.value.trim();
-    if (!msg) return;
-
-    socket.emit('send-chat', {
-        roomId: currentRoomId,
-        sender: userName,
-        message: msg,
-        fileUrl: null,
-        fileType: null,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    });
-    input.value = '';
-}
-
-function sendChatFile(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function(evt) {
-        const isImage = file.type.startsWith('image/');
-        socket.emit('send-chat', {
-            roomId: currentRoomId,
-            sender: userName,
-            message: `مرفق: ${file.name}`,
-            fileUrl: evt.target.result,
-            fileType: isImage ? 'image' : 'file',
-            fileName: file.name,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        });
-    };
-    reader.readAsDataURL(file);
-}
-
-function handleChatKey(e) {
-    if (e.key === 'Enter') sendChatMessage();
-}
-
-socket.on('receive-chat', (data) => {
-    const box = document.getElementById('chat-messages');
-    if (!box) return;
-
-    // زيادة عداد الإشعارات لو المستخدم مش فاتح تبويب الشات
-    if (activeTab !== 'chat') {
-        unreadChatCount++;
-        const badge = document.getElementById('chat-badge');
-        if (badge) {
-            badge.textContent = unreadChatCount;
-            badge.classList.remove('hidden');
-        }
-    }
-
-    const msgDiv = document.createElement('div');
-    msgDiv.className = 'chat-bubble-item';
-
-    let fileHTML = '';
-    if (data.fileUrl) {
-        if (data.fileType === 'image') {
-            fileHTML = `<br><img src="${data.fileUrl}" style="max-width:100%; border-radius:8px; margin-top:8px;">`;
-        } else {
-            fileHTML = `<br><a href="${data.fileUrl}" download="${data.fileName || 'file'}" class="btn-chat-file"><i class="fa-solid fa-download"></i> تحميل ${data.fileName || 'الملف'}</a>`;
-        }
-    }
-
-    msgDiv.innerHTML = `<strong style="color:#10b981">${data.sender}</strong> <small style="opacity:0.6; font-size:0.75rem">(${data.time})</small>: <p style="margin:4px 0 0 0; color:#f1f5f9">${data.message}</p>${fileHTML}`;
-    box.appendChild(msgDiv);
-    box.scrollTop = box.scrollHeight;
-});
-
-// ------------ باقي الميزات السابقة ------------
 function raiseHand() {
     socket.emit('raise-hand', { roomId: currentRoomId, userName });
     alert('تم إرسال طلب الكلمة للمحاضر ✋');
@@ -511,66 +555,3 @@ function togglePresentation() {
 socket.on('presentation-mode', (active) => {
     document.body.classList.toggle('presentation-mode', active);
 });
-
-let mediaRecorder;
-let recordedChunks = [];
-let isRecording = false;
-
-async function toggleRecording() {
-    const recordBtn = document.getElementById('record-btn');
-
-    if (!isRecording) {
-        try {
-            const stream = await navigator.mediaDevices.getDisplayMedia({
-                video: { mediaSource: "screen" },
-                audio: true
-            });
-
-            recordedChunks = [];
-            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-
-            mediaRecorder.ondataavailable = (e) => {
-                if (e.data.size > 0) recordedChunks.push(e.data);
-            };
-
-            mediaRecorder.onstop = saveRecording;
-            mediaRecorder.start();
-            isRecording = true;
-
-            if (recordBtn) {
-                recordBtn.innerHTML = '<i class="fa-solid fa-square"></i> إيقاف وحفظ التسجيل';
-                recordBtn.style.backgroundColor = '#dc2626';
-            }
-
-            stream.getVideoTracks()[0].onended = () => {
-                if (isRecording) toggleRecording();
-            };
-
-        } catch (err) {
-            alert('لم يتم السماح بتسجيل الشاشة.');
-        }
-    } else {
-        mediaRecorder.stop();
-        isRecording = false;
-
-        if (recordBtn) {
-            recordBtn.innerHTML = '<i class="fa-solid fa-circle"></i> بدء تسجيل المحاضرة';
-            recordBtn.style.backgroundColor = '';
-        }
-    }
-}
-
-function saveRecording() {
-    const blob = new Blob(recordedChunks, { type: 'video/webm' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = url;
-    a.download = `محاضرة-Al-Boulaqi-Meet.webm`;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-    }, 100);
-}

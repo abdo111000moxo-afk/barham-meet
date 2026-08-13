@@ -26,13 +26,14 @@ body {
     align-items: center;
 }
 
-/* شاشة تسجيل الدخول Glassmorphism */
+/* 🌟 شاشة التسجيل وشاشة التحكم الرئيسية (Glassmorphism) */
 .login-card {
+    position: relative;
     background: rgba(30, 41, 59, 0.7);
     backdrop-filter: blur(16px);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 20px;
-    padding: 40px 35px;
+    padding: 35px;
     width: 100%;
     max-width: 440px;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
@@ -48,6 +49,55 @@ body {
     align-items: center;
     justify-content: center;
     gap: 12px;
+}
+
+.home-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.home-header h2 {
+    font-size: 1.5rem;
+    color: #10b981;
+}
+
+.btn-settings-icon {
+    background: #334155;
+    border: none;
+    color: #38bdf8;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.1rem;
+    transition: all 0.2s;
+}
+
+.btn-settings-icon:hover {
+    background: #38bdf8;
+    color: #0f172a;
+    transform: rotate(45deg);
+}
+
+.user-welcome-box {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    background: #0f172a;
+    padding: 15px;
+    border-radius: 12px;
+    margin-bottom: 25px;
+    border: 1px solid #334155;
+}
+
+.user-welcome-box img {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: 2px solid #10b981;
+    object-fit: cover;
 }
 
 .form-group {
@@ -82,10 +132,13 @@ body {
     align-items: center;
     justify-content: center;
     gap: 8px;
+    transition: all 0.2s;
 }
 
 .btn-primary { background: #10b981; color: #0b0f19; }
+.btn-primary:hover { background: #059669; }
 .btn-secondary { background: #334155; color: #fff; }
+.btn-secondary:hover { background: #475569; }
 .btn-success { background: #059669; color: #fff; }
 .btn-danger { background: #dc2626; color: #fff; }
 .btn-warning { background: #d97706; color: #fff; }
@@ -93,10 +146,58 @@ body {
 .action-buttons { display: flex; flex-direction: column; gap: 12px; }
 .divider { color: #64748b; font-size: 0.85rem; text-align: center; }
 .join-box, .link-box { display: flex; gap: 8px; }
-.join-box input, .link-box input { flex: 1; background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 10px; color: #fff; }
+.join-box input, .link-box input {
+    flex: 1;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 10px;
+    color: #fff;
+}
 
-/* Layout الجانبي الفاخر */
+/* ⚙️ نافذة الإعدادات المنبثقة (Modal) */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+}
+
+.modal-overlay.hidden { display: none; }
+
+.modal-card {
+    background: #1e293b;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 420px;
+    padding: 25px;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #334155;
+    padding-bottom: 12px;
+}
+
+.btn-close-modal {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 1.5rem;
+    cursor: pointer;
+}
+
+/* 🏢 Layout الجانبي والـ Sidebar */
 .app-layout { display: flex; height: 100vh; width: 100vw; }
+
 .app-sidebar {
     width: 260px;
     background: #1e293b;
@@ -106,7 +207,16 @@ body {
     padding: 24px 16px;
 }
 
-.brand { font-size: 1.3rem; font-weight: 800; color: #10b981; display: flex; align-items: center; gap: 10px; margin-bottom: 30px; }
+.brand {
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: #10b981;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 30px;
+}
+
 .sidebar-nav { display: flex; flex-direction: column; gap: 6px; flex: 1; }
 
 .nav-item {
@@ -128,7 +238,7 @@ body {
 .nav-item:hover { background: rgba(255, 255, 255, 0.05); color: #f1f5f9; }
 .nav-item.active { background: #10b981; color: #0f172a; font-weight: 700; }
 
-/* 🔴 نقطة الإشعارات الحمراء الشغالة للشات */
+/* 🔴 نقطة الإشعارات الحمراء للشات */
 .badge-unread {
     background: #dc2626;
     color: #ffffff;
@@ -212,15 +322,11 @@ body {
 .btn-danger-tool { background: #dc2626; }
 .btn-success-tool { background: #059669; }
 
-.canvas-fullscreen-container {
-    width: 100%;
-    height: 100%;
-}
-
+.canvas-fullscreen-container { width: 100%; height: 100%; }
 .canvas-fullscreen-container.bg-white { background: #ffffff; }
 .canvas-fullscreen-container.bg-dark { background: #0f172a; }
 
-/* 🖥️ مشاركة الشاشة بالأدوات العلوية المساحة الكاملة */
+/* 🖥️ مشاركة الشاشة بالأدوات العلوية */
 .screen-top-bar {
     padding: 12px 20px;
     background: #1e293b;
@@ -302,9 +408,37 @@ body {
     font-size: 0.85rem;
 }
 
-/* 👤 البروفايل والكروت */
+/* 👤 البروفايل وكروت الحضور + أزرار كتم المنشئ */
 .profile-card { background: #1e293b; border-radius: 16px; padding: 40px; max-width: 480px; margin: 40px auto; text-align: center; }
 .profile-avatar-wrapper img { width: 110px; height: 110px; border-radius: 50%; border: 3px solid #10b981; margin-bottom: 16px; }
+
 .users-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
-.user-card { background: #1e293b; padding: 20px; border-radius: 14px; text-align: center; }
-.user-card img { width: 70px; height: 70px; border-radius: 50%; margin-bottom: 10px; }
+.user-card { background: #1e293b; padding: 20px; border-radius: 14px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.05); }
+.user-card img { width: 70px; height: 70px; border-radius: 50%; margin-bottom: 10px; object-fit: cover; }
+
+.host-controls {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.btn-ctrl {
+    background: #334155;
+    border: none;
+    color: #10b981;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.btn-ctrl.muted {
+    background: #dc2626;
+    color: #ffffff;
+}
