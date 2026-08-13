@@ -3,6 +3,7 @@ let currentRoomId = null;
 let isHost = false;
 let userName = "";
 let userPic = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
+let localStream = null;
 
 let unreadChatCount = 0;
 let activeTab = 'main';
@@ -12,8 +13,11 @@ let currentPageIndex = 0;
 const canvas = document.getElementById('whiteboard');
 const ctx = canvas ? canvas.getContext('2d') : null;
 let drawing = false;
+let currentTool = 'pen';
+let currentColor = '#10b981';
+let currentSize = 5;
 
-// 1. عند فتح الصفحة - قراءة البيانات والرابط
+// 1️⃣ بداية التشغيل وقراءة الحساب أوتوماتيكياً
 window.addEventListener('DOMContentLoaded', () => {
     const savedName = localStorage.getItem('alboulaqi_user_name');
     const savedPic = localStorage.getItem('alboulaqi_user_pic');
@@ -60,7 +64,63 @@ function updateHomeUI() {
     if (imgEl) imgEl.src = userPic;
 }
 
-// إنشاء وانضمام
+const userPicInput = document.getElementById('userpic-input');
+if (userPicInput) {
+    userPicInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(evt) { userPic = evt.target.result; };
+            reader.readAsDataURL(file);
+        }
+    });
+}
+
+// ⚙️ نافذة الإعدادات
+function openSettingsModal() {
+    const nameInput = document.getElementById('modal-username-input');
+    const imgPreview = document.getElementById('modal-preview-img');
+    const modal = document.getElementById('settings-modal');
+
+    if (nameInput) nameInput.value = userName;
+    if (imgPreview) imgPreview.src = userPic;
+    if (modal) modal.classList.remove('hidden');
+}
+
+function closeSettingsModal() {
+    const modal = document.getElementById('settings-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+const modalPicInput = document.getElementById('modal-userpic-input');
+if (modalPicInput) {
+    modalPicInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                userPic = evt.target.result;
+                const imgPreview = document.getElementById('modal-preview-img');
+                if (imgPreview) imgPreview.src = userPic;
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+}
+
+function saveSettingsChanges() {
+    const nameInput = document.getElementById('modal-username-input');
+    if (nameInput && nameInput.value.trim()) {
+        userName = nameInput.value.trim();
+        localStorage.setItem('alboulaqi_user_name', userName);
+        localStorage.setItem('alboulaqi_user_pic', userPic);
+        updateHomeUI();
+        closeSettingsModal();
+        alert('تم حفظ البيانات بنجاح! 🎉');
+    }
+}
+
+// 2️⃣ إنشاء وانضمام للغرفة
 function createRoom() {
     const generatedId = Math.random().toString(36).substring(2, 8);
     currentRoomId = generatedId;
@@ -113,8 +173,10 @@ function copyRoomLink() {
 function enterRoom() {
     const roomDisplay = document.getElementById('current-room-id');
     if (roomDisplay) roomDisplay.textContent = currentRoomId;
+    
     showScreen('room-screen');
     setTimeout(resizeCanvas, 100);
+    startLocalCamera();
 }
 
 function showScreen(screenId) {
@@ -125,11 +187,13 @@ function showScreen(screenId) {
 
 function leaveRoom() {
     if (confirm('هل أنت تأكد من الخروج من الغرفة؟')) {
+        if (localStream) localStream.getTracks().forEach(t => t.stop());
+        socket.emit('leave-room', { roomId: currentRoomId });
         window.location.href = window.location.origin;
     }
 }
 
-// التنقل بين التبويبات
+// 3️⃣ التنقل بين التبويبات والمزامنة
 function switchTab(tab) {
     activeTab = tab;
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
@@ -167,7 +231,193 @@ socket.on('update-users', (users) => {
     `).join('');
 });
 
-// ------------ الشات المباشر المضمون ------------
+// 4️⃣ السبورة والصفحات التفاعلية
+function resizeCanvas() {
+    if (!canvas || !canvas.parentElement) return;
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight;
+    redrawCurrentPage();
+}
+window.addEventListener('resize', resizeCanvas);
+
+if (canvas) {
+    canvas.addEventListener('mousedown', () => drawing = true);
+    canvas.addEventListener('mouseup', () => { drawing = false; if(ctx) ctx.beginPath(); });
+    canvas.addEventListener('mousemove', draw);
+
+    canvas.addEventListener('touchstart', (e) => { drawing = true; drawTouch(e); });
+    canvas.addEventListener('touchend', () => { drawing = false; if(ctx) ctx.beginPath(); });
+    canvas.addEventListener('touchmove', drawTouch);
+}
+
+function setTool(tool) {
+    currentTool = tool;
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById(`tool-${tool}`);
+    if (btn) btn.classList.add('active');
+}
+
+function draw(e) {
+    if (!drawing || !ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    executeDraw(e.clientX - rect.left, e.clientY - rect.top);
+}
+
+function drawTouch(e) {
+    if (!drawing || !ctx) return;
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const t = e.touches[0];
+    executeDraw(t.clientX - rect.left, t.clientY - rect.top);
+}
+
+function executeDraw(x, y) {
+    const colorEl = document.getElementById('brush-color');
+    const sizeEl = document.getElementById('brush-size');
+    
+    currentColor = colorEl ? colorEl.value : '#10b981';
+    currentSize = sizeEl ? sizeEl.value : 5;
+
+    const lineStyle = (currentTool === 'eraser') ? '#ffffff' : currentColor;
+
+    ctx.lineWidth = currentSize;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = lineStyle;
+
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+
+    if (!boardPages[currentPageIndex]) boardPages[currentPageIndex] = [];
+    boardPages[currentPageIndex].push({ x, y, color: lineStyle, size: currentSize });
+
+    socket.emit('draw-board', {
+        roomId: currentRoomId,
+        drawData: { x, y, color: lineStyle, size: currentSize, pageIndex: currentPageIndex }
+    });
+}
+
+socket.on('draw-board', ({ x, y, color, size, pageIndex }) => {
+    if (pageIndex !== currentPageIndex) return;
+    if (!ctx) return;
+    ctx.lineWidth = size;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = color;
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+});
+
+function updatePageDisplay() {
+    const pageDisplay = document.getElementById('page-num-display');
+    if (pageDisplay) pageDisplay.textContent = `${currentPageIndex + 1} / ${boardPages.length}`;
+}
+
+function addBoardPage() {
+    boardPages.push([]);
+    currentPageIndex = boardPages.length - 1;
+    clearCanvasScreen();
+    updatePageDisplay();
+    socket.emit('change-page', { roomId: currentRoomId, pageIndex: currentPageIndex, totalPages: boardPages.length });
+}
+
+function prevBoardPage() {
+    if (currentPageIndex > 0) {
+        currentPageIndex--;
+        redrawCurrentPage();
+        updatePageDisplay();
+        socket.emit('change-page', { roomId: currentRoomId, pageIndex: currentPageIndex, totalPages: boardPages.length });
+    }
+}
+
+function nextBoardPage() {
+    if (currentPageIndex < boardPages.length - 1) {
+        currentPageIndex++;
+        redrawCurrentPage();
+        updatePageDisplay();
+        socket.emit('change-page', { roomId: currentRoomId, pageIndex: currentPageIndex, totalPages: boardPages.length });
+    }
+}
+
+socket.on('change-page', ({ pageIndex, totalPages }) => {
+    while (boardPages.length < totalPages) boardPages.push([]);
+    currentPageIndex = pageIndex;
+    redrawCurrentPage();
+    updatePageDisplay();
+});
+
+function clearCanvasScreen() {
+    if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function redrawCurrentPage() {
+    clearCanvasScreen();
+    const currentLines = boardPages[currentPageIndex] || [];
+    currentLines.forEach(line => {
+        ctx.lineWidth = line.size;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = line.color;
+        ctx.lineTo(line.x, line.y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(line.x, line.y);
+    });
+}
+
+function clearBoard() {
+    boardPages[currentPageIndex] = [];
+    clearCanvasScreen();
+    socket.emit('clear-board', { roomId: currentRoomId });
+}
+
+socket.on('clear-board', () => {
+    boardPages[currentPageIndex] = [];
+    clearCanvasScreen();
+});
+
+function changeBoardBg(bgClass) {
+    const container = document.getElementById('canvas-container');
+    if (container) container.className = 'canvas-fullscreen-container ' + bgClass;
+    socket.emit('change-bg', { roomId: currentRoomId, bgClass });
+}
+
+socket.on('change-bg', (bgClass) => {
+    const container = document.getElementById('canvas-container');
+    if (container) container.className = 'canvas-fullscreen-container ' + bgClass;
+});
+
+function downloadBoard() {
+    if (!canvas) return;
+    const link = document.createElement('a');
+    link.download = `Al-Boulaqi-Board-Page-${currentPageIndex + 1}.png`;
+    link.href = canvas.toDataURL();
+    link.click();
+}
+
+function loadPDF(event) {
+    const file = event.target.files[0];
+    if (!file || file.type !== 'application/pdf') return alert('اختر ملف PDF صحيح');
+
+    const reader = new FileReader();
+    reader.onload = function() {
+        const typedarray = new Uint8Array(this.result);
+        if (typeof pdfjsLib !== 'undefined') {
+            pdfjsLib.getDocument(typedarray).promise.then(pdf => {
+                pdf.getPage(1).then(page => {
+                    const viewport = page.getViewport({ scale: 1.5 });
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    page.render({ canvasContext: ctx, viewport: viewport });
+                });
+            });
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+// 5️⃣ الشات المباشر والمرفقات
 function sendChatMessage() {
     const input = document.getElementById('chat-input');
     if (!input) return;
@@ -178,9 +428,31 @@ function sendChatMessage() {
         roomId: currentRoomId,
         sender: userName,
         message: msg,
+        fileUrl: null,
+        fileType: null,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     });
     input.value = '';
+}
+
+function sendChatFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        const isImage = file.type.startsWith('image/');
+        socket.emit('send-chat', {
+            roomId: currentRoomId,
+            sender: userName,
+            message: `مرفق: ${file.name}`,
+            fileUrl: evt.target.result,
+            fileType: isImage ? 'image' : 'file',
+            fileName: file.name,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+    };
+    reader.readAsDataURL(file);
 }
 
 function handleChatKey(e) {
@@ -202,15 +474,89 @@ socket.on('receive-chat', (data) => {
 
     const msgDiv = document.createElement('div');
     msgDiv.className = 'chat-bubble-item';
-    msgDiv.innerHTML = `<strong style="color:#10b981">${data.sender}</strong> <small style="opacity:0.6; font-size:0.75rem">(${data.time})</small>: <p style="margin:4px 0 0 0; color:#f1f5f9">${data.message}</p>`;
-    
+
+    let fileHTML = '';
+    if (data.fileUrl) {
+        if (data.fileType === 'image') {
+            fileHTML = `<br><img src="${data.fileUrl}" style="max-width:100%; border-radius:8px; margin-top:8px;">`;
+        } else {
+            fileHTML = `<br><a href="${data.fileUrl}" download="${data.fileName || 'file'}" class="btn-chat-file"><i class="fa-solid fa-download"></i> تحميل ${data.fileName || 'الملف'}</a>`;
+        }
+    }
+
+    msgDiv.innerHTML = `<strong style="color:#10b981">${data.sender}</strong> <small style="opacity:0.6; font-size:0.75rem">(${data.time})</small>: <p style="margin:4px 0 0 0; color:#f1f5f9">${data.message}</p>${fileHTML}`;
     box.appendChild(msgDiv);
     box.scrollTop = box.scrollHeight;
 });
 
-// ------------ السبورة ------------
-function resizeCanvas() {
-    if (!canvas || !canvas.parentElement) return;
-    canvas.width = canvas.parentElement.clientWidth;
-    canvas.height = canvas.parentElement.clientHeight;
+// 6️⃣ وظائف الكاميرا والشاشة واليد
+function raiseHand() {
+    socket.emit('raise-hand', { roomId: currentRoomId, userName });
+    alert('تم إرسال طلب الكلمة للمحاضر ✋');
 }
+
+socket.on('notify-hand', (name) => {
+    alert(`✋ ${name} يطلب الكلمة الآن!`);
+});
+
+function startLocalCamera() {
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then(stream => {
+            localStream = stream;
+            const video = document.getElementById('my-pip-video');
+            if (video) video.srcObject = stream;
+        }).catch(() => console.log('الكاميرا غير متاحة'));
+}
+
+function startScreenShare() {
+    if (!isHost) return alert('مشاركة الشاشة للمحاضر فقط');
+    navigator.mediaDevices.getDisplayMedia({ video: true })
+        .then(stream => {
+            const video = document.getElementById('shared-screen-video');
+            if (video) video.srcObject = stream;
+        }).catch(() => {});
+}
+
+let laserActive = false;
+function toggleLaser() {
+    laserActive = !laserActive;
+    const btn = document.getElementById('laser-btn');
+    if (btn) btn.classList.toggle('btn-danger', laserActive);
+}
+
+const screenWrapper = document.getElementById('screen-wrapper');
+if (screenWrapper) {
+    screenWrapper.addEventListener('mousemove', (e) => {
+        if (!laserActive) return;
+        const rect = screenWrapper.getBoundingClientRect();
+        moveLaser(e.clientX - rect.left, e.clientY - rect.top, true);
+        socket.emit('laser-move', { roomId: currentRoomId, x: e.clientX - rect.left, y: e.clientY - rect.top, visible: true });
+    });
+
+    screenWrapper.addEventListener('mouseleave', () => {
+        moveLaser(0, 0, false);
+        socket.emit('laser-move', { roomId: currentRoomId, x: 0, y: 0, visible: false });
+    });
+}
+
+function moveLaser(x, y, visible) {
+    const laser = document.getElementById('laser-pointer');
+    if (!laser) return;
+    laser.style.display = visible ? 'block' : 'none';
+    laser.style.left = `${x}px`;
+    laser.style.top = `${y}px`;
+}
+
+socket.on('laser-move', ({ x, y, visible }) => moveLaser(x, y, visible));
+
+let presentationActive = false;
+function togglePresentation() {
+    if (!isHost) return alert('هذه الميزة لمنشئ الغرفة فقط');
+    presentationActive = !presentationActive;
+    document.body.classList.toggle('presentation-mode', presentationActive);
+    socket.emit('presentation-mode', { roomId: currentRoomId, active: presentationActive });
+}
+
+socket.on('presentation-mode', (active) => {
+    document.body.classList.toggle('presentation-mode', active);
+});
