@@ -3,6 +3,7 @@ let currentRoomId = null;
 let isHost = false;
 let userName = "";
 let userPic = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
+let localStream = null;
 
 // السبورة
 const canvas = document.getElementById('whiteboard');
@@ -14,6 +15,7 @@ let currentSize = 5;
 
 // إعداد أبعاد الكانفاس
 function resizeCanvas() {
+    if (!canvas || !canvas.parentElement) return;
     canvas.width = canvas.parentElement.clientWidth;
     canvas.height = canvas.parentElement.clientHeight;
 }
@@ -29,31 +31,45 @@ document.getElementById('userpic-input').addEventListener('change', function(e) 
     }
 });
 
-// 1. إنشاء غرفة
+// 1. إنشاء غرفة (Host)
 function createRoom() {
-    userName = document.getElementById('username-input').value.trim() || 'عضو';
+    userName = document.getElementById('username-input').value.trim() || 'المحاضر';
     socket.emit('create-room', { userName, userPic }, (res) => {
         if (res.success) {
             currentRoomId = res.roomId;
             isHost = true;
+            applyHostPermissions();
             document.getElementById('created-room-link').value = `${window.location.origin}?room=${currentRoomId}`;
             showScreen('share-screen');
         }
     });
 }
 
-// 2. الانضمام لغرفة
+// 2. الانضمام لغرفة (Viewer/Host)
 function joinRoom() {
-    userName = document.getElementById('username-input').value.trim() || 'عضو';
+    userName = document.getElementById('username-input').value.trim() || 'حاضر';
     const roomId = document.getElementById('room-id-input').value.trim();
     if (!roomId) return alert('يرجى كتابة كود الغرفة');
 
     socket.emit('join-room', { roomId, userName, userPic }, (res) => {
         if (res.success) {
             currentRoomId = roomId;
+            isHost = res.isHost || false;
+            applyHostPermissions();
             enterRoom();
         } else {
-            alert(res.message);
+            alert(res.message || 'تعذر الانضمام للغرفة');
+        }
+    });
+}
+
+// إخفاء/إظهار عناصر الأدوات حسب صلاحية الـ Host
+function applyHostPermissions() {
+    document.querySelectorAll('.host-only').forEach(el => {
+        if (isHost) {
+            el.style.display = '';
+        } else {
+            el.style.display = 'none';
         }
     });
 }
@@ -68,7 +84,7 @@ function copyRoomLink() {
 function enterRoom() {
     document.getElementById('current-room-id').textContent = currentRoomId;
     showScreen('room-screen');
-    resizeCanvas();
+    setTimeout(resizeCanvas, 100);
     startLocalCamera();
 }
 
@@ -77,34 +93,46 @@ function showScreen(screenId) {
     document.getElementById(screenId).classList.add('active');
 }
 
+// 🚪 خروج من الغرفة
+function leaveRoom() {
+    if (confirm('هل أنت تأكد من رغبتك في الخروج من الغرفة؟')) {
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+        }
+        socket.emit('leave-room', { roomId: currentRoomId });
+        location.reload();
+    }
+}
+
 // التنقل بين التبويبات
 function switchTab(tab) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
-    document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
-    document.getElementById(`tab-${tab}`).classList.add('active');
+    const activeBtn = document.querySelector(`[data-tab="${tab}"]`);
+    const activeContent = document.getElementById(`tab-${tab}`);
+    if (activeBtn) activeBtn.classList.add('active');
+    if (activeContent) activeContent.classList.add('active');
 
-    if (tab === 'whiteboard') resizeCanvas();
+    if (tab === 'whiteboard') setTimeout(resizeCanvas, 50);
 
-    // إرسال تنبيه للمشتركين لو كنت الآدمن
     if (isHost) {
         socket.emit('change-tab', { roomId: currentRoomId, tab });
     }
 }
 
-// استقبال مزامنة التبويب للجميع
 socket.on('sync-tab', (tab) => {
     switchTab(tab);
 });
 
-// تحديث قوائم الأعضاء
+// تحديث قائمة الأعضاء
 socket.on('update-users', (users) => {
     const grid = document.getElementById('users-grid');
+    if (!grid) return;
     grid.innerHTML = users.map(u => `
         <div class="user-card">
-            <img src="${u.pic}">
-            <h4>${u.name} ${u.isHost ? '👑' : ''}</h4>
+            <img src="${u.pic || userPic}">
+            <h4>${u.name} ${u.isHost ? '👑 (Host)' : ''}</h4>
         </div>
     `).join('');
 });
@@ -114,10 +142,16 @@ canvas.addEventListener('mousedown', () => drawing = true);
 canvas.addEventListener('mouseup', () => { drawing = false; ctx.beginPath(); });
 canvas.addEventListener('mousemove', draw);
 
+// دعم اللمس للموبايل
+canvas.addEventListener('touchstart', (e) => { drawing = true; drawTouch(e); });
+canvas.addEventListener('touchend', () => { drawing = false; ctx.beginPath(); });
+canvas.addEventListener('touchmove', drawTouch);
+
 function setTool(tool) {
     currentTool = tool;
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById(`tool-${tool}`).classList.add('active');
+    const btn = document.getElementById(`tool-${tool}`);
+    if (btn) btn.classList.add('active');
 }
 
 function draw(e) {
@@ -126,6 +160,21 @@ function draw(e) {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
+    executeDraw(x, y);
+}
+
+function drawTouch(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches[0];
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+
+    executeDraw(x, y);
+}
+
+function executeDraw(x, y) {
     currentColor = document.getElementById('brush-color').value;
     currentSize = document.getElementById('brush-size').value;
 
@@ -143,7 +192,6 @@ function draw(e) {
     ctx.beginPath();
     ctx.moveTo(x, y);
 
-    // إرسال الكود للآخرين
     socket.emit('draw-board', {
         roomId: currentRoomId,
         drawData: { x, y, color: ctx.strokeStyle, size: currentSize }
@@ -176,7 +224,8 @@ function changeBoardBg(bgClass) {
 }
 
 socket.on('change-bg', (bgClass) => {
-    document.getElementById('canvas-container').className = 'canvas-container ' + bgClass;
+    const container = document.getElementById('canvas-container');
+    if (container) container.className = 'canvas-container ' + bgClass;
 });
 
 function downloadBoard() {
@@ -186,46 +235,117 @@ function downloadBoard() {
     link.click();
 }
 
+// ------------ رفع واستعراض PDF ------------
+function loadPDF(event) {
+    const file = event.target.files[0];
+    if (!file || file.type !== 'application/pdf') return alert('يرجى اختيار ملف PDF صحيح');
+
+    const fileReader = new FileReader();
+    fileReader.onload = function() {
+        const typedarray = new Uint8Array(this.result);
+        pdfjsLib.getDocument(typedarray).promise.then(pdf => {
+            pdf.getPage(1).then(page => {
+                const viewport = page.getViewport({ scale: 1.5 });
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                const renderContext = {
+                    canvasContext: ctx,
+                    viewport: viewport
+                };
+                page.render(renderContext);
+            });
+        });
+    };
+    fileReader.readAsArrayBuffer(file);
+}
+
+// ------------ الشات المباشر ------------
+function sendChatMessage() {
+    const input = document.getElementById('chat-input');
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    socket.emit('send-chat', {
+        roomId: currentRoomId,
+        sender: userName,
+        message: msg,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    });
+    input.value = '';
+}
+
+function handleChatKey(e) {
+    if (e.key === 'Enter') sendChatMessage();
+}
+
+socket.on('receive-chat', (data) => {
+    const box = document.getElementById('chat-messages');
+    if (!box) return;
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'chat-bubble';
+    msgDiv.innerHTML = `<strong>${data.sender}</strong> <small>(${data.time})</small>: <p>${data.message}</p>`;
+    box.appendChild(msgDiv);
+    box.scrollTop = box.scrollHeight;
+});
+
+// ------------ طلب الكلمة / رفع اليد ------------
+function raiseHand() {
+    socket.emit('raise-hand', { roomId: currentRoomId, userName });
+    alert('تم إرسال طلب الكلمة للمحاضر ✋');
+}
+
+socket.on('notify-hand', (name) => {
+    alert(`✋ ${name} يطلب الكلمة الان!`);
+});
+
 // ------------ الكاميرات ومشاركة الشاشة ------------
 function startLocalCamera() {
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
         .then(stream => {
-            document.getElementById('my-pip-video').srcObject = stream;
-        }).catch(err => console.log('الكاميرا غير متاحة'));
+            localStream = stream;
+            const video = document.getElementById('my-pip-video');
+            if (video) video.srcObject = stream;
+        }).catch(() => console.log('الكاميرا غير متاحة'));
 }
 
 function startScreenShare() {
+    if (!isHost) return alert('مشاركة الشاشة متاحة للمحاضر فقط');
     navigator.mediaDevices.getDisplayMedia({ video: true })
         .then(stream => {
             document.getElementById('shared-screen-video').srcObject = stream;
-        });
+        }).catch(() => {});
 }
 
 // ------------ مؤشر الليزر ------------
 let laserActive = false;
 function toggleLaser() {
     laserActive = !laserActive;
-    document.getElementById('laser-btn').classList.toggle('btn-danger', laserActive);
+    const btn = document.getElementById('laser-btn');
+    if (btn) btn.classList.toggle('btn-danger', laserActive);
 }
 
 const screenWrapper = document.getElementById('screen-wrapper');
-screenWrapper.addEventListener('mousemove', (e) => {
-    if (!laserActive) return;
-    const rect = screenWrapper.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+if (screenWrapper) {
+    screenWrapper.addEventListener('mousemove', (e) => {
+        if (!laserActive) return;
+        const rect = screenWrapper.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
 
-    moveLaser(x, y, true);
-    socket.emit('laser-move', { roomId: currentRoomId, x, y, visible: true });
-});
+        moveLaser(x, y, true);
+        socket.emit('laser-move', { roomId: currentRoomId, x, y, visible: true });
+    });
 
-screenWrapper.addEventListener('mouseleave', () => {
-    moveLaser(0, 0, false);
-    socket.emit('laser-move', { roomId: currentRoomId, x: 0, y: 0, visible: false });
-});
+    screenWrapper.addEventListener('mouseleave', () => {
+        moveLaser(0, 0, false);
+        socket.emit('laser-move', { roomId: currentRoomId, x: 0, y: 0, visible: false });
+    });
+}
 
 function moveLaser(x, y, visible) {
     const laser = document.getElementById('laser-pointer');
+    if (!laser) return;
     laser.style.display = visible ? 'block' : 'none';
     laser.style.left = `${x}px`;
     laser.style.top = `${y}px`;
@@ -258,7 +378,6 @@ async function toggleRecording() {
 
     if (!isRecording) {
         try {
-            // طلب إذن تسجيل الشاشة والميكروفون
             const stream = await navigator.mediaDevices.getDisplayMedia({
                 video: { mediaSource: "screen" },
                 audio: true
@@ -268,9 +387,7 @@ async function toggleRecording() {
             mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
 
             mediaRecorder.ondataavailable = (e) => {
-                if (e.data.size > 0) {
-                    recordedChunks.push(e.data);
-                }
+                if (e.data.size > 0) recordedChunks.push(e.data);
             };
 
             mediaRecorder.onstop = saveRecording;
@@ -278,11 +395,11 @@ async function toggleRecording() {
             mediaRecorder.start();
             isRecording = true;
 
-            // تغيير شكل ولون الزرار أثناء التسجيل
-            recordBtn.innerHTML = '<i class="fa-solid fa-square"></i> إيقاف وحفظ التسجيل';
-            recordBtn.style.backgroundColor = '#dc2626';
+            if (recordBtn) {
+                recordBtn.innerHTML = '<i class="fa-solid fa-square"></i> إيقاف وحفظ التسجيل';
+                recordBtn.style.backgroundColor = '#dc2626';
+            }
 
-            // إيقاف تلقائي في حال إغلاق المشاركة من شريط المتصفح
             stream.getVideoTracks()[0].onended = () => {
                 if (isRecording) toggleRecording();
             };
@@ -291,16 +408,16 @@ async function toggleRecording() {
             alert('لم يتم السماح بتسجيل الشاشة أو حدث خطأ.');
         }
     } else {
-        // إيقاف التسجيل
         mediaRecorder.stop();
         isRecording = false;
 
-        recordBtn.innerHTML = '<i class="fa-solid fa-circle"></i> بدء تسجيل المحاضرة';
-        recordBtn.style.backgroundColor = '';
+        if (recordBtn) {
+            recordBtn.innerHTML = '<i class="fa-solid fa-circle"></i> بدء تسجيل المحاضرة';
+            recordBtn.style.backgroundColor = '';
+        }
     }
 }
 
-// حفظ الفيديو تلقائياً على جهاز المستخدم
 function saveRecording() {
     const blob = new Blob(recordedChunks, { type: 'video/webm' });
     const url = URL.createObjectURL(blob);
