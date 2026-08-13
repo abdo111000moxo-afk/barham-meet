@@ -12,7 +12,7 @@ let unreadChatCount = 0;
 let activeTab = 'main';
 let boardPages = [[]];
 let currentPageIndex = 0;
-let currentUsersList = []; // حفظ القائمة محلياً لتحديثها عند دخول الغرفة
+let currentUsersList = [];
 
 const canvas = document.getElementById('whiteboard');
 const ctx = canvas ? canvas.getContext('2d') : null;
@@ -21,7 +21,7 @@ let currentTool = 'pen';
 let currentColor = '#10b981';
 let currentSize = 5;
 
-// تحميل الحساب وقراءة الرابط تلقائياً
+// 1️⃣ قراءة وكتابة الحساب
 window.addEventListener('DOMContentLoaded', () => {
     const savedName = localStorage.getItem('alboulaqi_user_name');
     const savedPic = localStorage.getItem('alboulaqi_user_pic');
@@ -105,7 +105,7 @@ function saveSettingsChanges() {
     }
 }
 
-// 2️⃣ إنشاء وانضمام الغرفة
+// 2️⃣ إنشاء وانضمام الغرفة مع تثبيت الـ RoomId
 function createRoom() {
     const generatedId = Math.random().toString(36).substring(2, 8);
     currentRoomId = generatedId;
@@ -129,7 +129,7 @@ function joinRoom() {
 
     currentRoomId = roomId;
 
-    socket.emit('join-room', { roomId, userName, userPic }, (res) => {
+    socket.emit('join-room', { roomId: currentRoomId, userName, userPic }, (res) => {
         if (res && res.success) {
             isHost = res.isHost || false;
             applyHostPermissions();
@@ -160,7 +160,7 @@ function enterRoom() {
     if (roomDisplay) roomDisplay.textContent = currentRoomId;
     
     showScreen('room-screen');
-    renderUsersGrid(currentUsersList); // إعادة رسم القائمة فور الدخول
+    renderUsersGrid(currentUsersList);
     setTimeout(resizeCanvas, 100);
     startLocalCamera();
 }
@@ -179,7 +179,7 @@ function leaveRoom() {
     }
 }
 
-// 3️⃣ التنقل وإدارة قائمة الحضور
+// 3️⃣ التنقل ومزامنة التبويبات
 function switchTab(tab) {
     activeTab = tab;
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
@@ -217,7 +217,6 @@ function renderUsersGrid(users) {
     `).join('');
 }
 
-// التحديث اللحظي للقائمة لجميع الأطراف
 socket.on('update-users', (users) => {
     currentUsersList = users;
     renderUsersGrid(users);
@@ -422,15 +421,26 @@ function loadPDF(event) {
     reader.readAsArrayBuffer(file);
 }
 
-// 5️⃣ الشات المباشر المحدث لعرض الرسائل عند الراسل والمستقبل
+// 5️⃣ الشات المباشر (معدل بضمان الكود للغرفة دائماً)
+function getActiveRoomId() {
+    if (currentRoomId) return currentRoomId;
+    const roomInput = document.getElementById('room-id-input');
+    if (roomInput && roomInput.value.trim()) return roomInput.value.trim();
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('room');
+}
+
 function sendChatMessage() {
     const input = document.getElementById('chat-input');
     if (!input) return;
     const msg = input.value.trim();
     if (!msg) return;
 
+    const roomIdToSend = getActiveRoomId();
+    if (!roomIdToSend) return alert('خطأ: كود الغرفة غير معروف');
+
     socket.emit('send-chat', {
-        roomId: currentRoomId,
+        roomId: roomIdToSend,
         sender: userName,
         message: msg,
         fileUrl: null,
@@ -444,11 +454,14 @@ function sendChatFile(event) {
     const file = event.target.files[0];
     if (!file) return;
 
+    const roomIdToSend = getActiveRoomId();
+    if (!roomIdToSend) return alert('خطأ: كود الغرفة غير معروف');
+
     const reader = new FileReader();
     reader.onload = function(evt) {
         const isImage = file.type.startsWith('image/');
         socket.emit('send-chat', {
-            roomId: currentRoomId,
+            roomId: roomIdToSend,
             sender: userName,
             message: `مرفق: ${file.name}`,
             fileUrl: evt.target.result,
@@ -468,7 +481,6 @@ function appendMessageToDOM(data) {
     const box = document.getElementById('chat-messages');
     if (!box) return;
 
-    // إضافة شارة الإشعار فقط لو الرسالة من شخص آخر وأنت مش فاتح تبويب الشات
     if (activeTab !== 'chat' && data.sender !== userName) {
         unreadChatCount++;
         const badge = document.getElementById('chat-badge');
@@ -495,12 +507,11 @@ function appendMessageToDOM(data) {
     box.scrollTop = box.scrollHeight;
 }
 
-// استقبال أي رسالة وعرضها فوراً للجميع
 socket.on('receive-chat', (data) => {
     appendMessageToDOM(data);
 });
 
-// 6️⃣ الكاميرا والليزر
+// 6️⃣ باقي الأدوات
 function raiseHand() {
     socket.emit('raise-hand', { roomId: currentRoomId, userName });
     alert('تم إرسال طلب الكلمة للمحاضر ✋');
