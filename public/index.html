@@ -10,7 +10,7 @@
 </head>
 <body>
 
-    <!-- 1. شاشة تسجيل الدخول لأول مرة -->
+    <!-- 1. تسجيل الدخول -->
     <div id="login-screen" class="screen">
         <div class="login-card">
             <h2><i class="fa-solid fa-video text-emerald"></i> Al-Boulaqi Meet</h2>
@@ -23,19 +23,17 @@
                 <label>الصورة الشخصية</label>
                 <input type="file" id="userpic-input" accept="image/*">
             </div>
-
             <button class="btn btn-primary btn-block" onclick="saveInitialProfile()">حفظ ومتابعة <i class="fa-solid fa-arrow-left"></i></button>
         </div>
     </div>
 
-    <!-- 2. شاشة التحكم الرئيسية -->
+    <!-- 2. الشاشة الرئيسية -->
     <div id="home-screen" class="screen">
         <div class="login-card">
             <div class="home-header">
                 <h2><i class="fa-solid fa-video text-emerald"></i> Al-Boulaqi Meet</h2>
                 <button class="btn-settings-icon" onclick="openSettingsModal()" title="إعدادات الملف الشخصي"><i class="fa-solid fa-gear"></i></button>
             </div>
-            
             <div class="user-welcome-box">
                 <img id="home-user-img" src="https://cdn-icons-png.flaticon.com/512/149/149071.png" alt="User">
                 <div>
@@ -43,7 +41,6 @@
                     <small style="color: #94a3b8;">جاهز للبدء؟</small>
                 </div>
             </div>
-
             <div class="action-buttons">
                 <button class="btn btn-primary" onclick="createRoom()"><i class="fa-solid fa-plus"></i> إنشاء غرفة جديدة (Host)</button>
                 <div class="divider">أو</div>
@@ -55,7 +52,7 @@
         </div>
     </div>
 
-    <!-- ⚙️ نافذة الإعدادات المنبثقة (Modal) -->
+    <!-- ⚙️ نافذة الإعدادات -->
     <div id="settings-modal" class="modal-overlay hidden">
         <div class="modal-card">
             <div class="modal-header">
@@ -79,7 +76,7 @@
         </div>
     </div>
 
-    <!-- 3. شاشة رابط الغرفة -->
+    <!-- 3. مشاركة الرابط -->
     <div id="share-screen" class="screen">
         <div class="login-card text-center">
             <h3>تم إنشاء الغرفة بنجاح! 🎉</h3>
@@ -92,10 +89,9 @@
         </div>
     </div>
 
-    <!-- 4. الواجهة الرئيسية للغرفة -->
+    <!-- 4. واجهة الغرفة -->
     <div id="room-screen" class="screen">
         <div class="app-layout">
-            
             <aside class="app-sidebar">
                 <div class="brand">
                     <i class="fa-solid fa-video"></i>
@@ -121,7 +117,6 @@
                     </button>
                 </nav>
 
-                <!-- أزرار التحكم بالصوت والكاميرا المنبثقة -->
                 <div class="media-controls-box mb-3">
                     <button class="btn btn-secondary btn-sm btn-block mb-1" id="toggle-mic-btn" onclick="toggleLocalAudio()"><i class="fa-solid fa-microphone"></i> الميكروفون: مفعل</button>
                     <button class="btn btn-secondary btn-sm btn-block mb-1" id="toggle-cam-btn" onclick="toggleLocalVideo()"><i class="fa-solid fa-video"></i> الكاميرا: مفعله</button>
@@ -189,9 +184,12 @@
                         </div>
                     </section>
 
-                    <!-- تبويب الكاميرات -->
+                    <!-- تبويب الكاميرات للمشتركين -->
                     <section id="tab-cameras" class="tab-content">
-                        <div class="cameras-grid" id="cameras-grid"></div>
+                        <h3><i class="fa-solid fa-video"></i> بث الكاميرات المباشر</h3>
+                        <div class="cameras-grid" id="cameras-grid">
+                            <!-- الفيديوهات تنزل هنا تلقائياً -->
+                        </div>
                     </section>
 
                     <!-- تبويب مشاركة الشاشة -->
@@ -214,9 +212,7 @@
                             <div class="chat-header-bar">
                                 <h3><i class="fa-solid fa-comments"></i> المحادثة المباشرة</h3>
                             </div>
-                            <div class="modern-chat-messages" id="chat-messages">
-                                <!-- الرسائل بتنزل هنا -->
-                            </div>
+                            <div class="modern-chat-messages" id="chat-messages"></div>
                             <div class="chat-input-bar">
                                 <label class="chat-attach-btn" title="إرفاق صورة أو ملف">
                                     <i class="fa-solid fa-paperclip"></i>
@@ -233,7 +229,7 @@
         </div>
     </div>
 
-    <!-- 🎥 الكاميرا المنبثقة العائمة (قابلة للسحب فوق الشاشة والسبورة) -->
+    <!-- 🎥 الكاميرا المنبثقة العائمة -->
     <div id="floating-cam-box" class="floating-cam-wrapper hidden">
         <div class="floating-cam-header" id="floating-cam-handle">
             <i class="fa-solid fa-up-down-left-right"></i>

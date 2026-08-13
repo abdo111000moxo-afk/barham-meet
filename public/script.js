@@ -5,6 +5,7 @@ let isHost = false;
 let userName = "";
 let userPic = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
 let localStream = null;
+const peerConnections = {}; // تخزين علاقات الفيديو مع كل حاضر
 
 let unreadChatCount = 0;
 let activeTab = 'main';
@@ -19,7 +20,10 @@ let currentTool = 'pen';
 let currentColor = '#10b981';
 let currentSize = 5;
 
-// 1️⃣ بداية التشغيل والتحكم بالشاشات
+const rtcConfig = {
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+};
+
 window.addEventListener('DOMContentLoaded', () => {
     const savedName = localStorage.getItem('alboulaqi_user_name');
     const savedPic = localStorage.getItem('alboulaqi_user_pic');
@@ -41,7 +45,6 @@ window.addEventListener('DOMContentLoaded', () => {
         showScreen('login-screen');
     }
 
-    // تفعيل السحب والتنقل للكاميرا المنبثقة
     const pipBox = document.getElementById('floating-cam-box');
     if (pipBox) makeElementDraggable(pipBox);
 });
@@ -79,7 +82,6 @@ function updateHomeUI() {
     if (imgEl) imgEl.src = userPic;
 }
 
-// ⚙️ الإعدادات المنبثقة
 function openSettingsModal() {
     const nameInput = document.getElementById('modal-username-input');
     const imgPreview = document.getElementById('modal-preview-img');
@@ -93,22 +95,6 @@ function openSettingsModal() {
 function closeSettingsModal() {
     const modal = document.getElementById('settings-modal');
     if (modal) modal.classList.add('hidden');
-}
-
-const modalPicInput = document.getElementById('modal-userpic-input');
-if (modalPicInput) {
-    modalPicInput.addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                userPic = evt.target.result;
-                const imgPreview = document.getElementById('modal-preview-img');
-                if (imgPreview) imgPreview.src = userPic;
-            };
-            reader.readAsDataURL(file);
-        }
-    });
 }
 
 function saveSettingsChanges() {
@@ -173,14 +159,16 @@ function copyRoomLink() {
     }
 }
 
-function enterRoom() {
+async function enterRoom() {
     const roomDisplay = document.getElementById('current-room-id');
     if (roomDisplay) roomDisplay.textContent = currentRoomId;
 
     showScreen('room-screen');
     renderUsersGrid(currentUsersList);
     setTimeout(resizeCanvas, 100);
-    startLocalCamera();
+    
+    // تشغيل الكاميرا محلياً وبدء ربط الفيديوهات مع الحاضرين
+    await startLocalCamera();
 }
 
 function leaveRoom() {
@@ -217,7 +205,7 @@ function switchTab(tab) {
 
 socket.on('sync-tab', (tab) => switchTab(tab));
 
-// 👥 رسم الحضور والتحكم
+// 👥 الحضور وتحديث الشبكة
 function renderUsersGrid(users) {
     const grid = document.getElementById('users-grid');
     if (!grid || !Array.isArray(users)) return;
@@ -260,6 +248,13 @@ socket.on('force-media-control', ({ type, state }) => {
 socket.on('update-users', (users) => {
     currentUsersList = users;
     renderUsersGrid(users);
+
+    // إنشاء اتصالات الفيديو مع كل الحاضرين الجدد
+    users.forEach(u => {
+        if (u.id !== socket.id && !peerConnections[u.id]) {
+            createPeerConnection(u.id, true);
+        }
+    });
 });
 
 socket.on('sync-initial-state', ({ messages, currentTab, users }) => {
@@ -275,14 +270,99 @@ socket.on('sync-initial-state', ({ messages, currentTab, users }) => {
     if (currentTab) switchTab(currentTab);
 });
 
-// 📹 التحكم بالكاميرا المحلية والصوت والكاميرا المنبثقة
-function startLocalCamera() {
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        .then(stream => {
-            localStream = stream;
-            const video = document.getElementById('my-pip-video');
-            if (video) video.srcObject = stream;
-        }).catch(() => console.log('الكاميرا غير متاحة'));
+// 📹📹 WebRTC (مشاهدة كاميرات بعض المباشرة)
+async function startLocalCamera() {
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const video = document.getElementById('my-pip-video');
+        if (video) video.srcObject = localStream;
+        addVideoStream('local-user', localStream, userName + ' (أنت)');
+    } catch (e) {
+        console.log('الكاميرا غير متاحة:', e);
+    }
+}
+
+function createPeerConnection(targetId, isOffer) {
+    const pc = new RTCPeerConnection(rtcConfig);
+    peerConnections[targetId] = pc;
+
+    if (localStream) {
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    }
+
+    pc.ontrack = (event) => {
+        const remoteUser = currentUsersList.find(u => u.id === targetId);
+        const name = remoteUser ? remoteUser.name : 'حاضر';
+        addVideoStream(targetId, event.streams[0], name);
+    };
+
+    pc.onicecandidate = (event) => {
+        if (event.candidate) {
+            socket.emit('webrtc-ice-candidate', { targetId, candidate: event.candidate });
+        }
+    };
+
+    if (isOffer) {
+        pc.createOffer().then(offer => {
+            pc.setLocalDescription(offer);
+            socket.emit('webrtc-offer', { targetId, offer });
+        });
+    }
+
+    return pc;
+}
+
+socket.on('webrtc-offer', async ({ senderId, offer }) => {
+    const pc = peerConnections[senderId] || createPeerConnection(senderId, false);
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    socket.emit('webrtc-answer', { targetId: senderId, answer });
+});
+
+socket.on('webrtc-answer', async ({ senderId, answer }) => {
+    const pc = peerConnections[senderId];
+    if (pc) {
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    }
+});
+
+socket.on('webrtc-ice-candidate', async ({ senderId, candidate }) => {
+    const pc = peerConnections[senderId];
+    if (pc) {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    }
+});
+
+socket.on('user-disconnected', (userId) => {
+    if (peerConnections[userId]) {
+        peerConnections[userId].close();
+        delete peerConnections[userId];
+    }
+    const card = document.getElementById(`cam-card-${userId}`);
+    if (card) card.remove();
+});
+
+function addVideoStream(id, stream, name) {
+    const grid = document.getElementById('cameras-grid');
+    if (!grid) return;
+
+    let card = document.getElementById(`cam-card-${id}`);
+    if (!card) {
+        card = document.createElement('div');
+        card.id = `cam-card-${id}`;
+        card.className = 'camera-video-card';
+        card.innerHTML = `
+            <video id="cam-video-${id}" autoplay playsinline ${id === 'local-user' ? 'muted' : ''}></video>
+            <span>${name}</span>
+        `;
+        grid.appendChild(card);
+    }
+
+    const video = document.getElementById(`cam-video-${id}`);
+    if (video && video.srcObject !== stream) {
+        video.srcObject = stream;
+    }
 }
 
 function toggleLocalAudio() {
@@ -310,7 +390,6 @@ function toggleFloatingCam() {
     if (box) box.classList.toggle('hidden');
 }
 
-// 🖐️ دالة السحب والإفراط للكاميرا المنبثقة
 function makeElementDraggable(elmnt) {
     let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
     const handle = document.getElementById('floating-cam-handle') || elmnt;
@@ -353,10 +432,8 @@ function makeElementDraggable(elmnt) {
 
     function touchDrag(e) {
         const touch = e.touches[0];
-        pos1 = pos3 - touch.clientX;
-        pos2 = pos4 - touch.clientY;
-        pos3 = touch.clientX;
-        pos4 = touch.clientY;
+        pos1 = touch.clientX;
+        pos2 = touch.clientY;
         elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
         elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
         elmnt.style.bottom = 'auto';

@@ -6,10 +6,7 @@ const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    },
+    cors: { origin: "*", methods: ["GET", "POST"] },
     transports: ['websocket', 'polling']
 });
 
@@ -19,7 +16,7 @@ const rooms = {};
 
 io.on('connection', (socket) => {
 
-    // 1️⃣ إنشاء غرفة جديدة (Host)
+    // 1️⃣ إنشاء غرفة
     socket.on('create-room', ({ userName, userPic, roomId }, callback) => {
         socket.join(roomId);
         socket.roomId = roomId;
@@ -27,11 +24,7 @@ io.on('connection', (socket) => {
         socket.isHost = true;
         
         if (!rooms[roomId]) {
-            rooms[roomId] = {
-                users: [],
-                messages: [],
-                currentTab: 'main'
-            };
+            rooms[roomId] = { users: [], messages: [], currentTab: 'main' };
         }
 
         rooms[roomId].users = [{ id: socket.id, name: userName, pic: userPic, isHost: true, micMuted: false, camOff: false }];
@@ -40,7 +33,7 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('update-users', rooms[roomId].users);
     });
 
-    // 2️⃣ انضمام لغرفة موجودة (Viewer)
+    // 2️⃣ انضمام لغرفة
     socket.on('join-room', ({ roomId, userName, userPic }, callback) => {
         socket.join(roomId);
         socket.roomId = roomId;
@@ -67,18 +60,28 @@ io.on('connection', (socket) => {
         });
     });
 
-    // 3️⃣ الشات المباشر
+    // 📹 3️⃣ إشارات اتصال الفيديو WebRTC (Signaling)
+    socket.on('webrtc-offer', ({ targetId, offer }) => {
+        io.to(targetId).emit('webrtc-offer', { senderId: socket.id, offer });
+    });
+
+    socket.on('webrtc-answer', ({ targetId, answer }) => {
+        io.to(targetId).emit('webrtc-answer', { senderId: socket.id, answer });
+    });
+
+    socket.on('webrtc-ice-candidate', ({ targetId, candidate }) => {
+        io.to(targetId).emit('webrtc-ice-candidate', { senderId: socket.id, candidate });
+    });
+
+    // 4️⃣ الشات والتحكم بالصوت والسبورة
     socket.on('send-chat', (data) => {
         if (data && data.roomId) {
             socket.join(data.roomId);
-            if (rooms[data.roomId]) {
-                rooms[data.roomId].messages.push(data);
-            }
+            if (rooms[data.roomId]) rooms[data.roomId].messages.push(data);
             io.to(data.roomId).emit('receive-chat', data);
         }
     });
 
-    // 4️⃣ كتم الصوت أو قفل الكاميرا
     socket.on('toggle-user-media', ({ roomId, targetUserId, type, state }) => {
         io.to(targetUserId).emit('force-media-control', { type, state });
         if (rooms[roomId]) {
@@ -91,7 +94,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 5️⃣ باقي التزامن والفعاليات
     socket.on('change-tab', ({ roomId, tab }) => {
         if (rooms[roomId]) rooms[roomId].currentTab = tab;
         socket.to(roomId).emit('sync-tab', tab);
@@ -116,6 +118,7 @@ function handleDisconnect(socket, roomId) {
     if (rooms[roomId] && rooms[roomId].users) {
         rooms[roomId].users = rooms[roomId].users.filter(u => u.id !== socket.id);
         io.to(roomId).emit('update-users', rooms[roomId].users);
+        io.to(roomId).emit('user-disconnected', socket.id);
     }
 }
 
