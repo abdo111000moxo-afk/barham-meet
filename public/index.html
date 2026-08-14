@@ -4,17 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>البولاقي ميت - El-Boulaqi Meet</title>
-  <!-- الخط والأيقونات -->
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <!-- مكتبة تصدير PDF للسبورة -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="dark-theme">
 
-  <!-- 1. شاشة البداية والدخول -->
+  <!-- 1. شاشة البداية والدخول السريع -->
   <div id="authScreen" class="screen-view active-view">
     <div class="auth-card">
       <div class="brand-header">
@@ -23,29 +21,29 @@
         <p class="brand-subtitle">المنصة الملكية للمؤتمرات المرئية والشرح التفاعلي</p>
       </div>
 
-      <!-- مرحلة تسجيل الاسم والصورة -->
+      <!-- مرحلة تسجيل الاسم والصورة (بدون أي أزرار) -->
       <div id="loginStep" class="auth-step active">
         <div class="avatar-picker">
           <div class="avatar-preview-wrapper">
-            <img id="avatarPreview" src="https://api.dicebear.com/7.x/bottts/svg?seed=VIPUser" alt="الصورة">
-            <label for="avatarInput" class="avatar-upload-btn" title="تغيير الصورة"><i class="fa-solid fa-camera"></i></label>
-            <input type="file" id="avatarInput" accept="image/*" style="display:none">
+            <img id="avatarPreview" src="https://api.dicebear.com/7.x/bottts/svg?seed=VIPUser" alt="الصورة الشخصية">
+            <label for="avatarInput" class="avatar-upload-btn" title="تغيير الصورة">
+              <i class="fa-solid fa-camera"></i>
+            </label>
+            <input type="file" id="avatarInput" accept="image/*" style="display:none;">
           </div>
-          <span class="field-hint">اختر صورة شخصية (اختياري)</span>
+          <span class="field-hint">اضغط على الكاميرا لاختيار صورة (اختياري)</span>
         </div>
 
         <div class="input-group">
           <label for="userNameInput"><i class="fa-solid fa-user"></i> الاسم الكريم</label>
-          <input type="text" id="userNameInput" placeholder="أدخل اسمك أو لقبك الكريم...">
+          <input type="text" id="userNameInput" placeholder="اكتب اسمك ثم اضغط Enter للدخول..." autofocus autocomplete="off">
         </div>
 
-        <button id="btnEnterApp" class="btn-luxury">
-          <i class="fa-solid fa-right-to-bracket"></i>
-          <span>دخول التطبيق</span>
-        </button>
+        <div class="press-enter-hint">
+          <i class="fa-solid fa-keyboard"></i> اكتب اسمك واضغط <strong>Enter ↵</strong> للدخول الفوري
+        </div>
       </div>
-
-      <!-- مرحلة إنشاء الغرف بعد الدخول -->
+      <!-- مرحلة الغرف بعد الضغط على Enter -->
       <div id="actionStep" class="auth-step">
         <div class="user-badge-header">
           <img id="userBadgeAvatar" src="" alt="Avatar">
@@ -96,7 +94,7 @@
     </div>
   </div>
 
-  <!-- 2. نافذة الإعدادات لتعديل الاسم والصورة -->
+  <!-- 2. نافذة تعديل الإعدادات -->
   <div id="settingsModal" class="modal-overlay hidden">
     <div class="modal-card">
       <div class="modal-header">
@@ -107,7 +105,7 @@
         <div class="settings-avatar-edit">
           <img id="settingsAvatarPreview" src="" alt="Avatar">
           <label for="settingsAvatarInput" class="btn-secondary-sm"><i class="fa-solid fa-image"></i> تغيير الصورة</label>
-          <input type="file" id="settingsAvatarInput" accept="image/*" style="display:none">
+          <input type="file" id="settingsAvatarInput" accept="image/*" style="display:none;">
         </div>
         <div class="input-group">
           <label><i class="fa-solid fa-signature"></i> تعديل الاسم</label>
@@ -123,7 +121,7 @@
     </div>
   </div>
 
-  <!-- 3. شاشة غرفة الاجتماع الرئيسية -->
+  <!-- 3. شاشة الاجتماع الرئيسية -->
   <div id="roomScreen" class="screen-view">
     <header class="room-top-header">
       <div class="header-left">
@@ -131,7 +129,6 @@
         <div class="room-badge"><span id="roomCodeDisplay">غرفة: #0000</span></div>
       </div>
 
-      <!-- أزرار تحكم المضيف بأوضاع الرؤية -->
       <div id="hostControlsHeader" class="header-center hidden">
         <div class="mode-toggle-group">
           <button id="btnViewHostOnly" class="btn-toggle"><i class="fa-solid fa-user-tie"></i> <span>وضع المضيف</span></button>
@@ -150,7 +147,6 @@
     </header>
 
     <div class="room-workspace">
-      <!-- الشريط الجانبي الفاخر (أيقونة + اسم) -->
       <aside class="royal-sidebar">
         <nav class="sidebar-nav">
           <button class="nav-item active" data-tab="tab-camera">
@@ -178,9 +174,8 @@
         </div>
       </aside>
 
-      <!-- مساحة العمل الرئيسية -->
       <main class="stage-container">
-        <!-- 1. الكاميرات -->
+        <!-- الكاميرات -->
         <section id="tab-camera" class="tab-pane active">
           <div class="video-grid-wrapper" id="videoGrid">
             <div class="video-card local-user" id="localVideoContainer">
@@ -190,7 +185,7 @@
           </div>
         </section>
 
-        <!-- 2. مشاركة الشاشة ووضع الشرح -->
+        <!-- الشاشة ووضع الشرح -->
         <section id="tab-screenshare" class="tab-pane">
           <div class="screenshare-toolbar">
             <div>
@@ -207,7 +202,6 @@
               <h3>لا يتم مشاركة أي شاشة حالياً</h3>
             </div>
             <video id="screenVideo" autoplay playsinline class="hidden"></video>
-            <!-- الكاميرا المنبثقة للمضيف في وضع الشرح -->
             <div id="pipHostOverlay" class="pip-host-overlay hidden">
               <video id="pipHostVideo" autoplay playsinline muted></video>
               <div class="pip-label"><i class="fa-solid fa-crown text-gold"></i> المحاضر</div>
@@ -215,7 +209,7 @@
           </div>
         </section>
 
-        <!-- 3. السبورة التفاعلية -->
+        <!-- السبورة -->
         <section id="tab-whiteboard" class="tab-pane">
           <div class="whiteboard-toolbar">
             <div class="tool-group">
@@ -245,7 +239,7 @@
           </div>
         </section>
 
-        <!-- 4. الشات والملفات -->
+        <!-- الشات -->
         <section id="tab-chat" class="tab-pane">
           <div class="chat-wrapper">
             <div class="chat-messages-container" id="chatMessages"></div>
@@ -261,7 +255,6 @@
     </div>
   </div>
 
-  <!-- تنبيهات رفع اليد الخاصة بالمضيف -->
   <div id="hostNotificationContainer" class="host-notifications"></div>
 
   <script src="app.js"></script>
