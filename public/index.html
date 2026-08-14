@@ -2,212 +2,268 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>نظام الاجتماعات والتعليم المباشر</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-    body { background: #121212; color: #fff; height: 100vh; overflow: hidden; }
-    
-    .hidden { display: none !important; }
-    .screen { position: absolute; inset: 0; display: flex; justify-content: center; align-items: center; background: #18181c; }
-    
-    /* Login & Dashboard Cards */
-    .card { background: #242526; padding: 30px; border-radius: 12px; width: 380px; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
-    .card h2 { margin-bottom: 20px; color: #0084ff; }
-    .card input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 6px; border: 1px solid #3a3b3c; background: #18181c; color: #fff; }
-    .card button { width: 100%; padding: 12px; background: #0084ff; border: none; color: #fff; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 10px; }
-    .avatar-preview { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin: 10px auto; background: #3a3b3c; display: block; }
-    
-    /* Room Layout */
-    #room-screen { display: flex; width: 100vw; height: 100vh; position: relative; }
-    
-    /* Sidebar */
-    .sidebar { width: 220px; background: #1f1f23; border-left: 1px solid #2f2f35; display: flex; flex-direction: column; padding: 15px 10px; gap: 10px; }
-    .sidebar-btn { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 15px; background: transparent; color: #a0a0a0; border: none; border-radius: 8px; cursor: pointer; text-align: right; font-size: 15px; }
-    .sidebar-btn.active, .sidebar-btn:hover { background: #0084ff; color: #fff; }
-    .badge { background: #ff3b30; color: #fff; font-size: 11px; padding: 2px 6px; border-radius: 10px; margin-right: auto; }
-
-    /* Main Area */
-    .main-content { flex: 1; position: relative; background: #0e0e10; display: flex; flex-direction: column; }
-    .tab-content { display: none; width: 100%; height: 100%; position: relative; }
-    .tab-content.active { display: flex; flex-direction: column; }
-
-    /* Topbars */
-    .top-toolbar { height: 50px; background: #18181c; border-bottom: 1px solid #2f2f35; display: flex; align-items: center; padding: 0 15px; gap: 15px; }
-    .tool-btn { background: #2f2f35; border: none; color: #fff; padding: 8px 12px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-    .tool-btn.active { background: #0084ff; }
-
-    /* Video Grids */
-    .video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; padding: 20px; width: 100%; height: 100%; overflow-y: auto; }
-    video { width: 100%; height: 100%; object-fit: cover; background: #000; border-radius: 8px; }
-
-    /* Floating Camera Overlay (المنبثق بالأسفل) */
-    .floating-cam { position: absolute; bottom: 20px; left: 20px; width: 180px; height: 135px; border-radius: 10px; overflow: hidden; border: 2px solid #0084ff; box-shadow: 0 4px 12px rgba(0,0,0,0.6); z-index: 100; cursor: move; }
-
-    /* Whiteboard Canvas */
-    .board-container { flex: 1; position: relative; width: 100%; height: 100%; }
-    canvas { background: #ffffff; display: block; width: 100%; height: 100%; }
-    canvas.black-bg { background: #000000; }
-    canvas.grid-bg { background-color: #ffffff; background-image: linear-gradient(#e5e5e5 1px, transparent 1px); background-size: 100% 24px; }
-
-    /* Modals & Popups */
-    .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 999; }
-    .modal-card { background: #242526; padding: 25px; border-radius: 10px; width: 400px; }
-    
-    /* Fullscreen Focus Overlay */
-    .focus-mode { position: fixed; inset: 0; z-index: 900; background: #000; }
-  </style>
-</head>
-<body>
-
-  <!-- 1. واجهة تسجيل البيانات (الاسم والصورة لأول مرة) -->
-  <div id="login-screen" class="screen">
-    <div class="card">
-      <h2>مرحباً بك!</h2>
-      <img id="avatar-preview" class="avatar-preview" src="https://via.placeholder.com/80" alt="Avatar">
-      <input type="file" id="avatar-input" accept="image/*" style="display:none">
-      <button onclick="document.getElementById('avatar-input').click()">اختيار صورة (اختياري)</button>
-      <input type="text" id="username-input" placeholder="اكتب اسمك هنا...">
-      <button onclick="saveProfileAndContinue()">دخول التطبيق</button>
-    </div>
-  </div>
-
-  <!-- 2. واجهة خيارات الغرف + الإعدادات -->
-  <div id="dashboard-screen" class="screen hidden">
-    <div style="position: absolute; top: 20px; left: 20px;">
-      <button class="tool-btn" onclick="openSettingsModal()"><i class="fa-solid fa-gear"></i> الإعدادات</button>
-    </div>
-    <div class="card">
-      <h2>غرف الاجتماعات</h2>
-      <button onclick="createRoom()">إنشاء غرفة جديدة</button>
-      <div style="margin: 15px 0;">أو</div>
-      <input type="text" id="room-id-input" placeholder="أدخل كود الغرفة...">
-      <button onclick="joinRoomDirect()" style="background:#28a745;">دخول الغرفة</button>
-    </div>
-  </div>
-
-  <!-- 3. المودال: رابط الغرفة ومتابعة -->
-  <div id="room-created-modal" class="modal hidden">
-    <div class="card">
-      <h3>تم إنشاء الغرفة بنجاح!</h3>
-      <input type="text" id="generated-link" readonly style="text-align: center;">
-      <button onclick="copyRoomLink()"><i class="fa-solid fa-copy"></i> نسخ الرابط</button>
-      <button onclick="proceedToRoom()" style="background:#28a745; margin-top:8px;">متابعة إلى الغرفة</button>
-    </div>
-  </div>
-
-  <!-- 4. المودال: الصلاحيات عند دخول الهوست -->
-  <div id="permissions-modal" class="modal hidden">
-    <div class="modal-card">
-      <h3 style="margin-bottom: 15px;">صلاحيات الأعضاء في الغرفة</h3>
-      <label><input type="checkbox" id="perm-board" checked> السماح بالرسم على الصبورة</label><br><br>
-      <label><input type="checkbox" id="perm-mic" checked> السماح بتشغيل المايك</label><br><br>
-      <label><input type="checkbox" id="perm-cam" checked> السماح بتشغيل الكاميرا</label><br><br>
-      <button onclick="savePermissions()" style="width:100%; padding:10px; background:#0084ff; color:#fff; border:none; border-radius:6px; font-weight:bold; cursor:pointer;">حفظ الصلاحيات</button>
-    </div>
-  </div>
-
-  <!-- 5. شاشة الغرفة الأساسية -->
-  <div id="room-screen" class="hidden">
-    
-    <!-- الشريط الجانبي -->
-    <div class="sidebar">
-      <button class="sidebar-btn active" onclick="hostSwitchTab('camera')">
-        <i class="fa-solid fa-video"></i> <span>الكاميرا</span>
-      </button>
-      <button class="sidebar-btn" onclick="hostSwitchTab('board')">
-        <i class="fa-solid fa-chalkboard"></i> <span>السبورة</span>
-      </button>
-      <button class="sidebar-btn" onclick="hostSwitchTab('screen')">
-        <i class="fa-solid fa-desktop"></i> <span>مشاركة الشاشة</span>
-      </button>
-      <button class="sidebar-btn" onclick="hostSwitchTab('chat')">
-        <i class="fa-solid fa-comments"></i> <span>المحادثة</span>
-        <span id="chat-badge" class="badge hidden">0</span>
-      </button>
-
-      <hr style="border-color: #2f2f35; margin: 10px 0;">
-      
-      <!-- أدوات سريعة -->
-      <button class="sidebar-btn" id="raise-hand-btn" onclick="toggleRaiseHand()">
-        <i class="fa-solid fa-hand"></i> <span>رفع اليد</span>
-      </button>
-      <button class="sidebar-btn" id="record-btn" onclick="toggleRecording()" style="color:#ff4d4d;">
-        <i class="fa-solid fa-circle"></i> <span>تسجيل الدرس</span>
-      </button>
-    </div>
-
-    <!-- المنطقة المركزية -->
-    <div class="main-content">
-
-      <!-- تبويب 1: الكاميرا -->
-      <div id="tab-camera" class="tab-content active">
-        <div class="top-toolbar">
-          <button class="tool-btn" onclick="toggleMyCam()"><i class="fa-solid fa-camera"></i> كاميرتي</button>
-          <button class="tool-btn" onclick="toggleMyMic()"><i class="fa-solid fa-microphone"></i> المايك</button>
-          <button class="tool-btn host-only" onclick="toggleViewMode('all')"><i class="fa-solid fa-users"></i> وضع الكل يرون البعض</button>
-          <button class="tool-btn host-only" onclick="toggleViewMode('host')"><i class="fa-solid fa-user-tie"></i> وضع رؤية الهوست فقط</button>
-        </div>
-        <div id="video-grid" class="video-grid">
-          <!-- فيديوهات الأعضاء تضاف هنا ديناميكياً -->
-        </div>
-      </div>
-
-      <!-- تبويب 2: الصبورة -->
-      <div id="tab-board" class="tab-content">
-        <div class="top-toolbar">
-          <button class="tool-btn board-tool active" onclick="setBoardTool('pen')"><i class="fa-solid fa-pen"></i> قلم</button>
-          <button class="tool-btn board-tool" onclick="setBoardTool('eraser')"><i class="fa-solid fa-eraser"></i> استيكة</button>
-          <input type="range" id="brush-size" min="1" max="50" value="5" title="حجم القلم/الاستيكة">
-          <input type="color" id="brush-color" value="#000000" title="لون القلم">
-          
-          <select id="board-bg" onchange="changeBoardBg(this.value)" class="tool-btn">
-            <option value="white">خلفية بيضاء</option>
-            <option value="black">خلفية سوداء</option>
-            <option value="grid">خلفية مسطرة</option>
-          </select>
-
-          <button class="tool-btn" onclick="clearBoard()"><i class="fa-solid fa-trash"></i> مسح الكل</button>
-          <button class="tool-btn" onclick="exportBoard('png')"><i class="fa-solid fa-image"></i> تصدير صورة</button>
-          <button class="tool-btn" onclick="exportBoard('pdf')"><i class="fa-solid fa-file-pdf"></i> تصدير PDF</button>
-        </div>
-        <div class="board-container">
-          <canvas id="whiteboard"></canvas>
-        </div>
-      </div>
-
-      <!-- تبويب 3: مشاركة الشاشة -->
-      <div id="tab-screen" class="tab-content">
-        <div class="top-toolbar">
-          <button class="tool-btn" onclick="startScreenShare()"><i class="fa-solid fa-desktop"></i> مشاركة الشاشة</button>
-          <button class="tool-btn host-only" id="focus-mode-btn" onclick="toggleFocusMode()"><i class="fa-solid fa-expand"></i> تفعيل وضع الشرح (ملء الشاشة للكل)</button>
-        </div>
-        <div id="screen-share-container" style="flex:1; display:flex; justify-content:center; align-items:center;">
-          <video id="screen-video" autoplay playsinline></video>
-        </div>
-      </div>
-
-      <!-- تبويب 4: الشات -->
-      <div id="tab-chat" class="tab-content">
-        <div id="chat-messages" style="flex:1; padding:20px; overflow-y:auto; display:flex; flex-direction:column; gap:10px;"></div>
-        <div class="top-toolbar" style="border-top:1px solid #2f2f35; border-bottom:none;">
-          <input type="file" id="chat-file" style="display:none" onchange="sendChatFile(this)">
-          <button class="tool-btn" onclick="document.getElementById('chat-file').click()"><i class="fa-solid fa-paperclip"></i></button>
-          <input type="text" id="chat-input" placeholder="اكتب رسالتك..." style="flex:1; padding:8px; border-radius:6px; border:none; background:#2f2f35; color:#fff;">
-          <button class="tool-btn" onclick="sendTextMessage()" style="background:#0084ff;"><i class="fa-solid fa-paper-plane"></i></button>
-        </div>
-      </div>
-
-      <!-- الصورة/الكاميرا المنبثقة السفلى (تظهر في الصبورة والشات والمشاركة) -->
-      <div id="floating-cam" class="floating-cam hidden">
-        <video id="floating-video" autoplay playsinline muted></video>
-      </div>
-
-    </div>
-  </div>
-
-  <script src="/socket.io/socket.io.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>البولاقي ميت - El-Boulaqi Meet</title>
+  <!-- الخط والأيقونات -->
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- مكتبة تصدير PDF للسبورة -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme">
+
+  <!-- 1. شاشة البداية والدخول -->
+  <div id="authScreen" class="screen-view active-view">
+    <div class="auth-card">
+      <div class="brand-header">
+        <div class="brand-logo"><i class="fa-solid fa-gem"></i></div>
+        <h1 class="brand-title">البولاقي ميت</h1>
+        <p class="brand-subtitle">المنصة الملكية للمؤتمرات المرئية والشرح التفاعلي</p>
+      </div>
+
+      <!-- مرحلة تسجيل الاسم والصورة -->
+      <div id="loginStep" class="auth-step active">
+        <div class="avatar-picker">
+          <div class="avatar-preview-wrapper">
+            <img id="avatarPreview" src="https://api.dicebear.com/7.x/bottts/svg?seed=VIPUser" alt="الصورة">
+            <label for="avatarInput" class="avatar-upload-btn" title="تغيير الصورة"><i class="fa-solid fa-camera"></i></label>
+            <input type="file" id="avatarInput" accept="image/*" style="display:none">
+          </div>
+          <span class="field-hint">اختر صورة شخصية (اختياري)</span>
+        </div>
+
+        <div class="input-group">
+          <label for="userNameInput"><i class="fa-solid fa-user"></i> الاسم الكريم</label>
+          <input type="text" id="userNameInput" placeholder="أدخل اسمك أو لقبك الكريم...">
+        </div>
+
+        <button id="btnEnterApp" class="btn-luxury">
+          <i class="fa-solid fa-right-to-bracket"></i>
+          <span>دخول التطبيق</span>
+        </button>
+      </div>
+
+      <!-- مرحلة إنشاء الغرف بعد الدخول -->
+      <div id="actionStep" class="auth-step">
+        <div class="user-badge-header">
+          <img id="userBadgeAvatar" src="" alt="Avatar">
+          <div class="user-meta">
+            <h3 id="userBadgeName">محمد عبد الرحمن</h3>
+            <span class="user-status-online"><i class="fa-solid fa-circle"></i> متصل في البولاقي ميت</span>
+          </div>
+          <button id="btnOpenSettingsModal" class="btn-icon-setting" title="الإعدادات"><i class="fa-solid fa-gear"></i></button>
+        </div>
+
+        <div class="room-action-grid">
+          <div class="action-card">
+            <div class="action-icon"><i class="fa-solid fa-plus-circle"></i></div>
+            <h4>إنشاء غرفة جديدة</h4>
+            <p>بدء اجتماع ملكي وتوليد رابط فوري</p>
+            <button id="btnCreateRoom" class="btn-action">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+              <span>إنشاء غرفة</span>
+            </button>
+          </div>
+
+          <div class="action-card">
+            <div class="action-icon"><i class="fa-solid fa-link"></i></div>
+            <h4>الانضمام لاجتماع</h4>
+            <p>الدخول عبر كود أو رابط الاجتماع</p>
+            <div class="join-input-wrap">
+              <input type="text" id="joinRoomIdInput" placeholder="أدخل كود الغرفة...">
+              <button id="btnJoinRoom" class="btn-action">
+                <i class="fa-solid fa-arrow-right-to-bracket"></i>
+                <span>متابعة للغرفة</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div id="roomLinkBox" class="room-link-box hidden">
+          <div class="link-label"><i class="fa-solid fa-shield-halved"></i> تم توليد رابط الغرفة بنجاح:</div>
+          <div class="link-field-row">
+            <input type="text" id="generatedLinkText" readonly>
+            <button id="btnCopyRoomLink" class="btn-icon"><i class="fa-solid fa-copy"></i></button>
+          </div>
+          <button id="btnProceedToRoom" class="btn-luxury-pulse">
+            <i class="fa-solid fa-door-open"></i>
+            <span>متابعة ودخول الغرفة الآن</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. نافذة الإعدادات لتعديل الاسم والصورة -->
+  <div id="settingsModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-sliders"></i> إعدادات الملف الشخصي</h3>
+        <button id="btnCloseSettingsModal" class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-avatar-edit">
+          <img id="settingsAvatarPreview" src="" alt="Avatar">
+          <label for="settingsAvatarInput" class="btn-secondary-sm"><i class="fa-solid fa-image"></i> تغيير الصورة</label>
+          <input type="file" id="settingsAvatarInput" accept="image/*" style="display:none">
+        </div>
+        <div class="input-group">
+          <label><i class="fa-solid fa-signature"></i> تعديل الاسم</label>
+          <input type="text" id="settingsNameInput">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnSaveSettings" class="btn-luxury">
+          <i class="fa-solid fa-floppy-disk"></i>
+          <span>حفظ التعديلات</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. شاشة غرفة الاجتماع الرئيسية -->
+  <div id="roomScreen" class="screen-view">
+    <header class="room-top-header">
+      <div class="header-left">
+        <div class="room-brand"><i class="fa-solid fa-gem"></i> <span>البولاقي ميت</span></div>
+        <div class="room-badge"><span id="roomCodeDisplay">غرفة: #0000</span></div>
+      </div>
+
+      <!-- أزرار تحكم المضيف بأوضاع الرؤية -->
+      <div id="hostControlsHeader" class="header-center hidden">
+        <div class="mode-toggle-group">
+          <button id="btnViewHostOnly" class="btn-toggle"><i class="fa-solid fa-user-tie"></i> <span>وضع المضيف</span></button>
+          <button id="btnViewGrid" class="btn-toggle active"><i class="fa-solid fa-border-all"></i> <span>وضع الشبكة</span></button>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <button id="btnRaiseHand" class="btn-luxury-sm"><i class="fa-solid fa-hand"></i> <span>رفع اليد</span></button>
+        <button id="btnRecordLecture" class="btn-record-sm"><i class="fa-solid fa-circle-dot"></i> <span id="recordText">تسجيل المحاضرة</span></button>
+        <div class="header-user-tag">
+          <img id="roomUserAvatar" src="" alt="Avatar">
+          <span id="roomUserName">أنت</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="room-workspace">
+      <!-- الشريط الجانبي الفاخر (أيقونة + اسم) -->
+      <aside class="royal-sidebar">
+        <nav class="sidebar-nav">
+          <button class="nav-item active" data-tab="tab-camera">
+            <div class="nav-icon"><i class="fa-solid fa-video"></i></div>
+            <span class="nav-text">الكاميرا</span>
+          </button>
+          <button class="nav-item" data-tab="tab-screenshare">
+            <div class="nav-icon"><i class="fa-solid fa-display"></i></div>
+            <span class="nav-text">مشاركة الشاشة</span>
+          </button>
+          <button class="nav-item" data-tab="tab-whiteboard">
+            <div class="nav-icon"><i class="fa-solid fa-chalkboard"></i></div>
+            <span class="nav-text">السبورة</span>
+          </button>
+          <button class="nav-item" data-tab="tab-chat">
+            <div class="nav-icon"><i class="fa-solid fa-comments"></i><span id="chatUnreadBadge" class="badge-dot hidden"></span></div>
+            <span class="nav-text">الشات</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-bottom">
+          <button id="btnToggleAudio" class="btn-control-circle"><i class="fa-solid fa-microphone"></i></button>
+          <button id="btnToggleVideo" class="btn-control-circle"><i class="fa-solid fa-camera"></i></button>
+          <button id="btnLeaveRoom" class="btn-control-circle danger"><i class="fa-solid fa-phone-slash"></i></button>
+        </div>
+      </aside>
+
+      <!-- مساحة العمل الرئيسية -->
+      <main class="stage-container">
+        <!-- 1. الكاميرات -->
+        <section id="tab-camera" class="tab-pane active">
+          <div class="video-grid-wrapper" id="videoGrid">
+            <div class="video-card local-user" id="localVideoContainer">
+              <video id="localVideo" autoplay playsinline muted></video>
+              <div class="video-overlay"><span id="localCardName">أنت</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. مشاركة الشاشة ووضع الشرح -->
+        <section id="tab-screenshare" class="tab-pane">
+          <div class="screenshare-toolbar">
+            <div>
+              <button id="btnStartScreenShare" class="btn-luxury-sm"><i class="fa-solid fa-arrow-up-from-bracket"></i> <span>مشاركة الشاشة</span></button>
+              <button id="btnStopScreenShare" class="btn-danger-sm hidden"><i class="fa-solid fa-stop"></i> <span>إيقاف المشاركة</span></button>
+            </div>
+            <div id="hostExplainControl" class="hidden">
+              <button id="btnToggleExplainMode" class="btn-gold-sm"><i class="fa-solid fa-chalkboard-user"></i> <span>تفعيل وضع الشرح</span></button>
+            </div>
+          </div>
+          <div class="screenshare-stage">
+            <div id="noScreenPlaceholder" class="placeholder-box">
+              <i class="fa-solid fa-display fa-3x"></i>
+              <h3>لا يتم مشاركة أي شاشة حالياً</h3>
+            </div>
+            <video id="screenVideo" autoplay playsinline class="hidden"></video>
+            <!-- الكاميرا المنبثقة للمضيف في وضع الشرح -->
+            <div id="pipHostOverlay" class="pip-host-overlay hidden">
+              <video id="pipHostVideo" autoplay playsinline muted></video>
+              <div class="pip-label"><i class="fa-solid fa-crown text-gold"></i> المحاضر</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. السبورة التفاعلية -->
+        <section id="tab-whiteboard" class="tab-pane">
+          <div class="whiteboard-toolbar">
+            <div class="tool-group">
+              <button class="wb-btn active" id="wbToolPen"><i class="fa-solid fa-pen"></i> <span>القلم</span></button>
+              <button class="wb-btn" id="wbToolEraser"><i class="fa-solid fa-eraser"></i> <span>الاستيكة</span></button>
+              <input type="color" id="wbColorPicker" value="#f1c40f">
+            </div>
+            <div class="tool-group size-slider-group">
+              <label><i class="fa-solid fa-text-height"></i> الحجم</label>
+              <input type="range" id="wbSizeSlider" min="2" max="50" value="4">
+              <span id="wbSizeDisplay">4px</span>
+            </div>
+            <div class="tool-group page-controls">
+              <button class="wb-btn" id="wbPrevPage"><i class="fa-solid fa-chevron-right"></i></button>
+              <span id="wbPageCounter">صفحة 1 / 1</span>
+              <button class="wb-btn" id="wbNextPage"><i class="fa-solid fa-chevron-left"></i></button>
+              <button class="wb-btn" id="wbAddPage"><i class="fa-solid fa-file-circle-plus"></i> <span>صفحة جديدة</span></button>
+            </div>
+            <div class="tool-group actions-group">
+              <button class="wb-btn danger" id="wbClearBtn"><i class="fa-solid fa-trash-can"></i> <span>مسح الكل</span></button>
+              <button class="wb-btn action" id="wbExportImgBtn"><i class="fa-solid fa-image"></i> <span>تصدير صورة</span></button>
+              <button class="wb-btn action" id="wbExportPdfBtn"><i class="fa-solid fa-file-pdf"></i> <span>تصدير PDF</span></button>
+            </div>
+          </div>
+          <div class="whiteboard-canvas-container">
+            <canvas id="whiteboardCanvas"></canvas>
+          </div>
+        </section>
+
+        <!-- 4. الشات والملفات -->
+        <section id="tab-chat" class="tab-pane">
+          <div class="chat-wrapper">
+            <div class="chat-messages-container" id="chatMessages"></div>
+            <form id="chatForm" class="chat-input-area">
+              <label for="chatFileInput" class="chat-attach-btn"><i class="fa-solid fa-paperclip"></i></label>
+              <input type="file" id="chatFileInput" style="display: none;" accept="image/*,.pdf,.doc,.docx,.zip,.txt">
+              <input type="text" id="chatTextInput" placeholder="اكتب رسالتك هنا..." autocomplete="off">
+              <button type="submit" class="chat-send-btn"><i class="fa-solid fa-paper-plane"></i> <span>إرسال</span></button>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- تنبيهات رفع اليد الخاصة بالمضيف -->
+  <div id="hostNotificationContainer" class="host-notifications"></div>
+
   <script src="app.js"></script>
 </body>
 </html>

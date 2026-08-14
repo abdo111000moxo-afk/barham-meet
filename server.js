@@ -6,112 +6,143 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: "*" }
+  cors: { origin: "*", methods: ["GET", "POST"] },
+  maxHttpBufferSize: 1e8 // 100 MB لتبادل الملفات والصور
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// تخزين بيانات الغرف
+// تخزين حالات الغرف
 const rooms = {};
 
 io.on('connection', (socket) => {
-  
-  // 1. دخول الغرفة أو إنشاؤها
-  socket.on('join-room', ({ roomId, user }) => {
+  // الانضمام للغرفة
+  socket.on('join-room', ({ roomId, user, isHost }) => {
     socket.join(roomId);
     
     if (!rooms[roomId]) {
       rooms[roomId] = {
-        hostId: socket.id,
-        permissions: { allowWhiteboard: true, allowMic: true, allowCam: true },
-        participants: {},
-        currentTab: 'camera'
+        hostId: isHost ? socket.id : null,
+        users: {},
+        viewMode: 'grid',
+        explainMode: false,
+        activeTab: 'camera'
       };
     }
+    
+    if (isHost && !rooms[roomId].hostId) {
+      rooms[roomId].hostId = socket.id;
+    }
 
-    rooms[roomId].participants[socket.id] = { ...user, socketId: socket.id, handRaised: false };
+    rooms[roomId].users[socket.id] = {
+      id: socket.id,
+      name: user.name || 'مستخدم مميز',
+      avatar: user.avatar || '',
+      isHost: rooms[roomId].hostId === socket.id
+    };
 
-    // إرسال البيانات للعضو الجديد
-    socket.emit('init-room-state', {
+    socket.emit('room-joined', {
+      roomId,
       isHost: rooms[roomId].hostId === socket.id,
-      permissions: rooms[roomId].permissions,
-      participants: rooms[roomId].participants,
-      currentTab: rooms[roomId].currentTab
+      roomState: rooms[roomId],
+      existingUsers: rooms[roomId].users
     });
 
-    // إبلاغ الجميع بالعضو الجديد
-    io.to(roomId).emit('user-joined', { socketId: socket.id, user });
-  });
-
-  // 2. تحديث الصلاحيات من الهوست
-  socket.on('update-permissions', ({ roomId, permissions }) => {
-    if (rooms[roomId] && rooms[roomId].hostId === socket.id) {
-      rooms[roomId].permissions = permissions;
-      io.to(roomId).emit('permissions-updated', permissions);
-    }
-  });
-
-  // 3. التنقل الموحد بين الأزرار (أنا انتقلت لزر كله ينتقل له)
-  socket.on('switch-tab', ({ roomId, tabName }) => {
-    if (rooms[roomId] && rooms[roomId].hostId === socket.id) {
-      rooms[roomId].currentTab = tabName;
-      io.to(roomId).emit('tab-switched', tabName);
-    }
-  });
-
-  // 4. وضع الشرح (Focus Presentation Mode)
-  socket.on('toggle-focus-mode', ({ roomId, enabled }) => {
-    if (rooms[roomId] && rooms[roomId].hostId === socket.id) {
-      io.to(roomId).emit('focus-mode-toggled', enabled);
-    }
-  });
-
-  // 5. رسم الصبورة المباشر Sync
-  socket.on('draw-stroke', ({ roomId, strokeData }) => {
-    socket.to(roomId).emit('draw-stroke', strokeData);
-  });
-
-  socket.on('clear-board', ({ roomId }) => {
-    socket.to(roomId).emit('clear-board');
-  });
-
-  // 6. رفع اليد
-  socket.on('raise-hand', ({ roomId, raised }) => {
-    if (rooms[roomId] && rooms[roomId].participants[socket.id]) {
-      rooms[roomId].participants[socket.id].handRaised = raised;
-      io.to(roomId).emit('hand-status-changed', {
-        socketId: socket.id,
-        userName: rooms[roomId].participants[socket.id].name,
-        handRaised: raised
-      });
-    }
-  });
-
-  // 7. التحكم في مايك/كاميرا عضو من الهوست
-  socket.on('toggle-user-media', ({ roomId, targetSocketId, type, enabled }) => {
-    if (rooms[roomId] && rooms[roomId].hostId === socket.id) {
-      io.to(targetSocketId).emit('force-media-toggle', { type, enabled });
-    }
-  });
-
-  // 8. الشات والمرفقات
-  socket.on('send-chat', ({ roomId, message }) => {
-    io.to(roomId).emit('receive-chat', {
-      senderId: socket.id,
-      senderName: rooms[roomId]?.participants[socket.id]?.name || 'مجهول',
-      ...message
+    socket.to(roomId).emit('user-connected', {
+      userId: socket.id,
+      user: rooms[roomId].users[socket.id]
     });
   });
 
+  // إشارات WebRTC
+  socket.on('signal-offer', ({ targetId, offer }) => {
+    io.to(targetId).emit('signal-offer', { senderId: socket.id, offer });
+  });
+
+  socket.on('signal-answer', ({ targetId, answer }) => {
+    io.to(targetId).emit('signal-answer', { senderId: socket.id, answer });
+  });
+
+  socket.on('signal-ice-candidate', ({ targetId, candidate }) => {
+    io.to(targetId).emit('signal-ice-candidate', { senderId: socket.id, candidate });
+  });
+
+  // أوضاع الرؤية (خاص بالمضيف)
+  socket.on('change-view-mode', ({ roomId, mode }) => {
+    if (rooms[roomId] && rooms[roomId].hostId === socket.id) {
+      rooms[roomId].viewMode = mode;
+      io.to(roomId).emit('view-mode-changed', { mode });
+    }
+  });
+
+  // وضع الشرح التفاعلي (خاص بالمضيف)
+  socket.on('toggle-explain-mode', ({ roomId, active }) => {
+    if (rooms[roomId] && rooms[roomId].hostId === socket.id) {
+      rooms[roomId].explainMode = active;
+      io.to(roomId).emit('explain-mode-changed', { active, hostId: socket.id });
+    }
+  });
+
+  // مزامنة التنقل اللحظي مع المضيف
+  socket.on('sync-navigation', ({ roomId, tabId }) => {
+    if (rooms[roomId] && rooms[roomId].hostId === socket.id) {
+      rooms[roomId].activeTab = tabId;
+      io.to(roomId).emit('navigation-synced', { tabId });
+    }
+  });
+
+  // مزامنة السبورة التفاعلية
+  socket.on('whiteboard-draw', ({ roomId, drawData }) => {
+    socket.to(roomId).emit('whiteboard-draw', drawData);
+  });
+
+  socket.on('whiteboard-page-change', ({ roomId, pageIndex, totalPages }) => {
+    socket.to(roomId).emit('whiteboard-page-change', { pageIndex, totalPages });
+  });
+
+  socket.on('whiteboard-clear', ({ roomId, pageIndex }) => {
+    socket.to(roomId).emit('whiteboard-clear', { pageIndex });
+  });
+
+  // الشات والملفات
+  socket.on('send-chat-message', ({ roomId, message }) => {
+    io.to(roomId).emit('new-chat-message', message);
+  });
+
+  // رفع اليد (يرسل حصرياً للمضيف فقط)
+  socket.on('raise-hand', ({ roomId }) => {
+    if (rooms[roomId]) {
+      const user = rooms[roomId].users[socket.id];
+      const hostId = rooms[roomId].hostId;
+      if (hostId && user) {
+        io.to(hostId).emit('hand-raised-notification', {
+          userId: socket.id,
+          userName: user.name,
+          userAvatar: user.avatar,
+          timestamp: new Date().toLocaleTimeString('ar-EG')
+        });
+      }
+    }
+  });
+
+  // مغادرة المستخدم
   socket.on('disconnect', () => {
     for (const roomId in rooms) {
-      if (rooms[roomId].participants[socket.id]) {
-        delete rooms[roomId].participants[socket.id];
-        io.to(roomId).emit('user-left', socket.id);
+      if (rooms[roomId].users[socket.id]) {
+        const userName = rooms[roomId].users[socket.id].name;
+        delete rooms[roomId].users[socket.id];
+        
+        if (rooms[roomId].hostId === socket.id) {
+          rooms[roomId].hostId = null;
+        }
+
+        io.to(roomId).emit('user-disconnected', { userId: socket.id, userName });
       }
     }
   });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => {
+  console.log(`خادم البولاقي ميت يعمل بنجاح على: http://localhost:${PORT}`);
+});
